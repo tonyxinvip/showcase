@@ -61,7 +61,17 @@ check_page() {
   #     既是死引用，也等于把私有仓库的结构说出去。2026-08-09 实际漏过一次：
   #     内联 JS 的注释里写了 test/physics-check.js，前面几道闸全过。
   local srcref
-  srcref=$(grep -oE '(^|[^A-Za-z0-9/._-])(src|test|tests|vendor|scripts|workspace|dist|node_modules)/[A-Za-z0-9._/-]+' "$f" | head -3)
+  # 目录名清单要覆盖各 demo 源码仓库的**实际**顶层目录，不是通用前端脚手架那几个。
+  # 2026-08-09 实测：化学 bench 的源码仓库顶层是 docs/ engine/ evidence/ specs/
+  # tests/ tools/ web/，与原清单只有 tests 一个重合——这道闸对它基本不生效。
+  #
+  # 另外两处也改了，两个都真的漏过东西：
+  #   · 前置边界原本排除 '/'，于是 '../engine/x.mjs' 整条逃检
+  #   · 尾部原本要求斜杠后是 ASCII，于是 'engine/ 推出' 这种中文行文逃检
+  #     （实锤：这一条让内部工程说明进了已发布的公开页）
+  # 现在只认「已知源码目录名 + 斜杠」，斜杠后面是什么一概不管。
+  local srcref
+  srcref=$(grep -oE '(src|test|tests|vendor|scripts|workspace|dist|node_modules|engine|web|specs|tools|docs|evidence|shared|lib|components|packages)/' "$f" | sort -u | head -3)
   if [ -n "$srcref" ]; then
     printf '      %s\n' "$srcref"
     bad "引用了源码仓库里的路径（源码仓库是 private，公开页里是死引用）"

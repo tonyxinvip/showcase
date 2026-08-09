@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>数学动画内容库 · 演示</title>
 <style>
-/* 色值取自 shared/knowledge/brand.md，未自配色 */
+/* 色值取自品牌规范，未自配色 */
 :root{
   --navy:#081B3A; --blue:#2563EB; --blue2:#1D4ED8; --rust:#C2552F; --rust2:#A8421F;
   --teal-text:#0C857A;
@@ -287,7 +287,7 @@ const BEAT_CN = {
   numberline:"数轴", plot:"函数图像", bullets:"要点"
 };
 
-/* 规格大纲：逐条来自 specs/*.json 的真实内容，不是占位文案。
+/* 规格大纲：逐条来自真实的动画规格文件，不是占位文案。
    units = 该段在 manim 里的动画条数，可由 spec 确定性算出（play + wait 次数），
    渲染中 partial_movie_files 的文件数就是它 —— 所以第 3 阶段的进度是真的可观测量。
    实测：quadratic-graph 总计 31，与 manim 输出的 "Played 31 animations" 一致。 */
@@ -314,11 +314,10 @@ const OUTLINE = {
   ]}
 };
 
-/* 第 2 阶段实测耗时（秒）。命令：build.py check specs/<name>.json */
+/* 第 2 阶段实测耗时（秒），由规格校验命令实测得到 */
 const CHECK_SECONDS = { "absolute-value":0.24, "perfect-square":1.23, "quadratic-graph":0.23 };
 
-/* 校验拦截路径用的真实输出，逐字来自：
-   /opt/manim-venv/bin/python pipeline/build.py check specs/_llm_typical_failure.json  */
+/* 校验拦截路径用的真实输出，逐字来自一份故意写坏的规格的校验结果 */
 const FAIL_CASE = {
   topic: "勾股定理",
   spec: "_llm_typical_failure.json",
