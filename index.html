@@ -1,0 +1,62 @@
+<meta charset="utf-8">
+<title>CocoRobo · Showcase</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{
+  --ink:#12161f; --ink-2:#48546a; --ink-3:#7a8598;
+  --paper:#f6f8fb; --card:#fff; --rule:#e2e7ef;
+  --accent:#2f6bd8; --accent-soft:#e9effc;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#e7ebf3; --ink-2:#aeb8c8; --ink-3:#7e8899;
+    --paper:#0f1218; --card:#161b24; --rule:#2a323f;
+    --accent:#7aa5f2; --accent-soft:#1b2740;
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#e7ebf3; --ink-2:#aeb8c8; --ink-3:#7e8899;
+  --paper:#0f1218; --card:#161b24; --rule:#2a323f;
+  --accent:#7aa5f2; --accent-soft:#1b2740;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.75;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:clamp(32px,7vw,80px) clamp(18px,5vw,32px) 80px}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+h1{font-size:clamp(26px,5vw,36px);margin:0 0 10px;letter-spacing:-.02em;text-wrap:balance}
+.sub{color:var(--ink-2);margin:0 0 40px;max-width:52ch}
+.card{
+  display:block;text-decoration:none;color:inherit;background:var(--card);
+  border:1px solid var(--rule);border-radius:14px;padding:22px 24px;margin-bottom:16px;
+  transition:border-color .15s ease, transform .15s ease;
+}
+.card:hover,.card:focus-visible{border-color:var(--accent);transform:translateY(-2px)}
+.card h2{margin:0 0 6px;font-size:19px;letter-spacing:-.01em}
+.card p{margin:0 0 14px;color:var(--ink-2);font-size:15px}
+.tags{display:flex;flex-wrap:wrap;gap:7px}
+.tags span{
+  font-family:var(--mono);font-size:11.5px;color:var(--accent);
+  background:var(--accent-soft);border-radius:999px;padding:3px 10px
+}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--rule);color:var(--ink-3);font-size:13.5px}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<div class="wrap">
+  <p class="eyebrow">CocoRobo · Showcase</p>
+  <h1>可以直接点开看的东西</h1>
+  <p class="sub">教育产品原型的公开演示。每个都是自包含的静态页——无后端、无密钥、不采集任何数据。</p>
+
+  <a class="card" href="math-animation/">
+    <h2>数学动画内容库 →</h2>
+    <p>输入教学主题，输出可在课堂播放的数学动画。由 Manim 离线预生成，含校验拦截演示。</p>
+    <div class="tags"><span>Manim</span><span>中学数学</span><span>离线预生成</span><span>3 段成片</span></div>
+  </a>
+
+  <footer>
+    这些页面均不含真实学生数据，不发出外部请求，不携带任何密钥。
+  </footer>
+</div>
