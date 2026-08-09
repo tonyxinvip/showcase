@@ -1172,11 +1172,16 @@ window.addEventListener("resize", function(){
   if(tState.sim) renderSim(tState.sim);
   if(sState.sim) renderSim(sState.sim);
 });
-var hash = location.hash || "";
-if(hash.indexOf("#lab=") === 0){
+function openFromHash(){
+  var hash = location.hash || "";
+  if(hash.indexOf("#lab=") !== 0) return;
   try{ switchTab("s"); openLab(dec(hash)); }
-  catch(e){ switchTab("s"); $("loadHint").textContent = "链接里的实验码读不出来。"; }
+  catch(e){ switchTab("s"); $("sWrap").style.display = "none"; $("loadBox").style.display = "";
+            $("loadHint").textContent = "链接里的实验码读不出来。"; }
 }
+openFromHash();
+/* 已经开着页面时换 hash 是同文档跳转，脚本不会重跑，得自己听 */
+window.addEventListener("hashchange", openFromHash);
 window.__PL = {TEMPLATES:TEMPLATES, fidelity:fidelity, runHeadless:runHeadless, enc:enc, dec:dec};
 })();
 </script>
