@@ -43,7 +43,12 @@ check_page() {
     || bad "缺 <meta charset=\"utf-8\">，中文会变乱码"
 
   # 3. 密钥
-  if grep -qiE 'sk-[A-Za-z0-9]{16,}|api[_-]?key[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{8,}|password[[:space:]]*[:=]' "$f"; then
+  #    password 那一支必须带一个「像值的值」才算命中：只写 `password[:=]`
+  #    会在任何打包过的前端页面上误报 —— React 内部有一张 HTML input 类型表，
+  #    里面就有 `password:!0`。2026-08-09 发 scope 时踩到。
+  #    一个总是误报的闸门会被养成「看到红字就忽略」，那它就等于没有。
+  #    改成要求引号包起来的 6 位以上值，真凭证仍然判死（已注入实测）。
+  if grep -qiE 'sk-[A-Za-z0-9]{16,}|(api[_-]?key|password|passwd|secret|token)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{6,}' "$f"; then
     bad "疑似密钥/凭据"
   else ok "无密钥命中"; fi
 
@@ -99,7 +104,16 @@ fi
 for d in "${targets[@]}"; do
   check_page "$d/index.html" "$d"
   # 7. 索引页必须有指向它的卡片 —— 加了目录忘了挂链接，是同一类静默失效
+  #
+  #    例外：目录里放一个 .unlisted 文件表示「故意不挂在索引页」，
+  #    用于只想给特定人发链接的页面。必须是显式文件，才能把「故意不挂」
+  #    和「忘了挂」区分开 —— 后者仍然判死。
+  #    注意：不挂链接 ≠ 私密。仓库是公开的，页面照样能被访问到，
+  #    只是不从索引页导航过去。真正不能公开的东西不要放进这个仓库。
   if grep -qF "href=\"$d/\"" index.html; then ok "索引页已挂链接"
+  elif [ -f "$d/.unlisted" ]; then
+    ok "索引页未挂链接（$d/.unlisted 标记为故意不列）"
+    printf '      理由：%s\n' "$(head -1 "$d/.unlisted")"
   else bad "索引页没有指向 $d/ 的卡片"; fi
   echo
 done
