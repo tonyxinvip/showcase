@@ -713,7 +713,7 @@ function makeSim(tplKey, params, canvas){
   T.build.call(T, sim);
   /* Body 出厂时 deltaTime=1000/60。子步长下首帧的 Body._timeCorrection 会把初速按
      dt/body.deltaTime 缩放一次——不报错，轨迹照样是条像样的抛物线，只是短了。
-     这条在 test/physics-check.js 里有反例夹具，不要"修好"那个夹具。 */
+     删掉下面这一行，抛体射程会偏 -93.8%。测试里有对应的反例夹具，不要"修好"它。 */
   M.Composite.allBodies(sim.world).forEach(function(b){ b.deltaTime = sim.dt; });
   return sim;
 }

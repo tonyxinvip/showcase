@@ -52,6 +52,16 @@ check_page() {
     bad "含【对内】标记或内部文件引用"
   else ok "无对内材料"; fi
 
+  # 4b. 源码树路径引用 —— 每个 demo 的源码都在**私有**仓库，公开页里出现这类路径
+  #     既是死引用，也等于把私有仓库的结构说出去。2026-08-09 实际漏过一次：
+  #     内联 JS 的注释里写了 test/physics-check.js，前面几道闸全过。
+  local srcref
+  srcref=$(grep -oE '(^|[^A-Za-z0-9/._-])(src|test|tests|vendor|scripts|workspace|dist|node_modules)/[A-Za-z0-9._/-]+' "$f" | head -3)
+  if [ -n "$srcref" ]; then
+    printf '      %s\n' "$srcref"
+    bad "引用了源码仓库里的路径（源码仓库是 private，公开页里是死引用）"
+  else ok "无源码树路径引用"; fi
+
   # 5. 外部请求 —— 公开页面不许连出去（data: 与相对路径放行）
   local ext
   ext=$(grep -oE '(src|href)="https?://[^"]+"' "$f" \
