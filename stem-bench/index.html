@@ -1,0 +1,1432 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>抛体打靶 · STEM Bench 复刻</title>
+<meta name="description" content="一台可操作的物理 bench：物理由方程固定，教学内容由内容层提供，诊断由确定性规则跑出。命中不是终点，过程才是。">
+<style>/* 抛体打靶 · STEM Bench 复刻 —— 单文件页面的样式 */
+
+:root {
+  --bg: #f6f6f4;
+  --panel: #ffffff;
+  --ink: #16181c;
+  --ink-2: #4a5058;
+  --ink-3: #7c838c;
+  --line: #e2e3e0;
+  --accent: #2563eb;
+  --good: #15803d;
+  --good-bg: #eaf6ee;
+  --warn: #b45309;
+  --warn-bg: #fdf3e3;
+  --bad: #b91c1c;
+  --bad-bg: #fbeceb;
+  --field: #0e1319;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  line-height: 1.7;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px 72px;
+}
+
+/* ── 页头 ─────────────────────────────────────────────── */
+header.top {
+  padding: 44px 0 28px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 32px;
+}
+.eyebrow {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin: 0 0 10px;
+}
+h1 {
+  font-size: 34px;
+  line-height: 1.35;
+  margin: 0 0 12px;
+  letter-spacing: -0.01em;
+}
+.claim {
+  display: inline-block;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--accent);
+  background: #eef3ff;
+  border: 1px solid #d6e2ff;
+  border-radius: 999px;
+  padding: 4px 12px;
+  margin-bottom: 14px;
+}
+.lede {
+  font-size: 17px;
+  color: var(--ink-2);
+  margin: 0;
+  max-width: 62ch;
+}
+
+/* ── 章节 ─────────────────────────────────────────────── */
+section {
+  margin: 46px 0 0;
+}
+h2 {
+  font-size: 21px;
+  margin: 0 0 6px;
+  letter-spacing: -0.005em;
+}
+h2 + .sub {
+  color: var(--ink-3);
+  font-size: 14.5px;
+  margin: 0 0 18px;
+  max-width: 68ch;
+}
+
+/* ── 实验台 ───────────────────────────────────────────── */
+/* 画幅是 53 m × 41.5 m 的等比例窗口——横竖必须同一个尺度，
+   把抛物线横向拉宽会让 45° 看起来不像 45°，那是画面在撒谎。
+   所以宁可给画布设上限宽度，也不让它跟着栏宽长到 600 px 高。 */
+.bench {
+  display: grid;
+  grid-template-columns: minmax(0, 680px) 316px;
+  justify-content: center;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .bench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.field {
+  background: var(--field);
+  border-radius: var(--radius);
+  border: 1px solid #232c36;
+  overflow: hidden;
+  position: relative;
+}
+.field canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.clipflag {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 32, 0.85);
+  border: 1px solid #2c3a49;
+  border-radius: 999px;
+  padding: 3px 12px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.clipflag.on {
+  opacity: 1;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 16px 18px;
+}
+.panel + .panel {
+  margin-top: 14px;
+}
+.panel h3 {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+.ctrl {
+  margin-bottom: 16px;
+}
+.ctrl:last-of-type {
+  margin-bottom: 8px;
+}
+.ctrl .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+.ctrl label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.ctrl .val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.ctrl input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  margin: 0;
+}
+.ctrl .note {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 2px;
+  min-height: 1em;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.fire {
+  width: 100%;
+  padding: 11px;
+  font-size: 15.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+}
+.fire:hover {
+  background: #1d4ed8;
+}
+.fire:disabled {
+  background: #9aa6b8;
+  cursor: default;
+}
+.ghost {
+  width: 100%;
+  padding: 9px;
+  font-size: 14px;
+  background: #fff;
+  border-color: var(--line);
+  color: var(--ink-2);
+  margin-top: 8px;
+}
+.ghost:hover {
+  border-color: #c9cbc7;
+}
+.ghost:disabled {
+  color: var(--ink-3);
+  cursor: default;
+  background: #fafafa;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+.stat .k {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.stat .v {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 19px;
+  line-height: 1.3;
+}
+.stat .v.hit {
+  color: var(--good);
+}
+.hidden-note {
+  font-size: 12px;
+  color: var(--ink-3);
+  border-top: 1px dashed var(--line);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+/* ── 诊断卡 ───────────────────────────────────────────── */
+.findings {
+  display: grid;
+  gap: 12px;
+}
+.finding {
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 15px 18px;
+}
+.finding.high {
+  border-left-color: var(--bad);
+}
+.finding.medium {
+  border-left-color: var(--warn);
+}
+.finding.good {
+  border-left-color: var(--good);
+}
+.finding .tag {
+  display: inline-block;
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  border-radius: 4px;
+  padding: 1px 7px;
+  margin-bottom: 7px;
+}
+.finding.high .tag {
+  color: var(--bad);
+  background: var(--bad-bg);
+}
+.finding.medium .tag {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+.finding.good .tag {
+  color: var(--good);
+  background: var(--good-bg);
+}
+.finding h4 {
+  margin: 0 0 6px;
+  font-size: 16.5px;
+}
+.finding .ph {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  background: #f4f5f3;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 0 0 8px;
+}
+.finding p {
+  margin: 0 0 8px;
+  color: var(--ink-2);
+  font-size: 15px;
+}
+.finding .next {
+  margin: 0;
+  font-size: 14.5px;
+}
+.finding .next b {
+  color: var(--ink);
+}
+.empty {
+  color: var(--ink-3);
+  font-size: 15px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  text-align: center;
+}
+
+/* ── 三人对照 ─────────────────────────────────────────── */
+.compare {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 800px) {
+  .compare {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #dbe6ff;
+}
+.card .mini {
+  background: var(--field);
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.card .body {
+  padding: 12px 14px 14px;
+}
+.card .who {
+  font-weight: 600;
+  font-size: 15.5px;
+  margin: 0 0 2px;
+}
+.card .nums {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 0 0 8px;
+}
+.card .verdict {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  margin: 0 0 10px;
+  min-height: 2.6em;
+}
+.card button {
+  width: 100%;
+  padding: 7px;
+  font-size: 13.5px;
+  background: #fff;
+  border-color: var(--line);
+  color: var(--ink-2);
+}
+.card button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.card button:disabled {
+  color: var(--ink-3);
+  background: #fafafa;
+  cursor: default;
+}
+
+.callout {
+  background: #101418;
+  color: #e6eaef;
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-top: 16px;
+  font-size: 16.5px;
+  line-height: 1.75;
+}
+.callout b {
+  color: #fff;
+}
+
+/* ── 说明 ─────────────────────────────────────────────── */
+.how {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 800px) {
+  .how {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.how div {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.how h4 {
+  margin: 0 0 7px;
+  font-size: 15.5px;
+}
+.how p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14.5px;
+}
+
+.modelnote {
+  font-size: 14px;
+  color: var(--ink-2);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--ink-3);
+  border-radius: var(--radius);
+  padding: 13px 17px;
+  margin-top: 18px;
+}
+
+/* ── 页脚 ─────────────────────────────────────────────── */
+footer.bottom {
+  margin-top: 64px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+footer.bottom .byline {
+  font-size: 15px;
+  color: var(--ink-2);
+}
+footer.bottom .byline b {
+  color: var(--ink);
+}
+footer.bottom .pubdate {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  margin-top: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <p class="eyebrow">STEM Bench 复刻 · 第 1 台 · 物理 / 运动学</p>
+    <h1 id="bench-title">抛体打靶</h1>
+    <p><span class="claim" id="claim">Authored by AI, over fixed physics</span></p>
+    <p class="lede">一台可以动手的物理 bench。命中不是终点——这一页真正记录的，是你<b>怎么</b>调到命中的。</p>
+  </header>
+
+  <section>
+    <h2>试一发</h2>
+    <p class="sub"><b id="task-goal">把球打进 42 米外、8 米高的圈里。</b> <span id="task-hint">三个滑块，你可以任意调。发射点离地 1.5 米。</span></p>
+
+    <div class="bench">
+      <div class="field">
+        <canvas id="field"></canvas>
+        <div class="clipflag" id="clipflag">球飞出了画面顶部</div>
+      </div>
+
+      <div>
+        <div class="panel">
+          <h3>控制台</h3>
+          <div id="controls"></div>
+          <button class="fire" id="fire">发射</button>
+          <button class="ghost" id="report" disabled>生成过程报告（还需 3 发）</button>
+        </div>
+
+        <div class="panel">
+          <h3>实时</h3>
+          <div class="stats">
+            <div class="stat"><div class="k">发射</div><div class="v" id="s-shots">0</div></div>
+            <div class="stat"><div class="k">命中</div><div class="v" id="s-hits">0</div></div>
+            <div class="stat"><div class="k">上一发脱靶</div><div class="v" id="s-miss">—</div></div>
+            <div class="stat"><div class="k">最好一发</div><div class="v" id="s-best">—</div></div>
+          </div>
+          <p class="hidden-note">这里不显示你动了几次哪个滑块。显示出来，你就会开始为这个数字而调——观测本身会改变行为。这些计数留到报告里。</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="modelnote" id="model-note">本模型是真空抛体：没有空气阻力，重力恒定 9.8 m/s²。这是一个明示的简化——真实世界有阻力，结论会变。</p>
+  </section>
+
+  <section id="report-sec">
+    <h2>过程报告</h2>
+    <p class="sub" id="report-sub">打完至少三发，点「生成我的过程报告」。也可以先看下面两位学生的。</p>
+    <div class="findings" id="findings">
+      <div class="empty">还没有报告。发射几次，或者在下面选一位学生。</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>同样命中，过程不同</h2>
+    <p class="sub">两位学生都把球打进了圈。如果只记一个分数，他们是同一个结果。</p>
+    <div class="compare" id="compare"></div>
+    <div class="callout">
+      分数是一个数，过程是屏幕上那一把弧线。<b>碰运气打中和真的会算，从此分得开。</b>
+    </div>
+    <p class="sub" id="replay-note" style="margin-top:14px"></p>
+  </section>
+
+  <section>
+    <h2>这台 bench 埋了三个东西</h2>
+    <p class="sub">三个陷阱都不是"出题技巧"，都是这套方程本来就有的性质——所以它们经得起追问。</p>
+    <div class="how" id="traps"></div>
+  </section>
+
+  <section>
+    <h2>它是怎么工作的</h2>
+    <p class="sub" id="crit-line"></p>
+    <div class="how" id="how"></div>
+  </section>
+
+  <footer class="bottom">
+    <div class="byline">作者：<b>辛海洋</b></div>
+    <div class="pubdate"><time datetime="2026-08-09">2026-08-09</time></div>
+  </footer>
+
+</div>
+
+<script>window.Content = {"_":"生成层 —— 教学内容。这一层可以由 AI 写，也可以由老师改；它不参与任何数值计算。它是 .json 不是 .js，是有意的：内容层不该有执行能力。","bench":{"id":"projectile-01","title":"抛体打靶","subject":"物理 · 运动学","grade":"初三 — 高一","claim":"Authored by AI, over fixed physics","claimNote":"任务、陷阱、诊断话术在这一层；轨迹、命中、角度解全部由确定层的方程算出。两层之间只有数据，没有语言。"},"world":{"gravity":9.8,"launchHeight":1.5,"target":{"x":42,"y":8,"radius":1.2},"controls":{"angle":{"min":5,"max":85,"step":0.5,"default":45,"unit":"°","label":"发射角"},"v0":{"min":10,"max":40,"step":0.5,"default":30,"unit":"m/s","label":"初速度"},"mass":{"min":0.5,"max":10,"step":0.5,"default":2,"unit":"kg","label":"小球质量"}}},"task":{"goal":"把球打进 42 米外、8 米高的圈里。","hint":"三个滑块，你可以任意调。发射点离地 1.5 米。","modelNote":"本模型是真空抛体：没有空气阻力，重力恒定 9.8 m/s²。这是一个明示的简化——真实世界有阻力，结论会变。"},"traps":[{"id":"mass","name":"质量陷阱","visible":"界面上有一个质量滑块，看起来和另外两个一样。","mechanism":"质量不进运动方程。这个滑块在物理上什么也不做，它只测一件事：学生认不认为重的落得快。它被动过几次，会记在过程报告里。"},{"id":"forty-five","name":"45° 迷信","visible":"很多人上来就把角度放到 45°，然后只加初速。","mechanism":"45° 是平地、同高度、无阻力时的最远角。这个靶高 8 m、发射点 1.5 m，最省力角是 49.4°。更反直觉的是：锁死 45° 再加初速，球会越飞越高、离靶越来越远。"},{"id":"two-branches","name":"两解盲区","visible":"命中一次就停手的人，永远不知道还有另一个答案。","mechanism":"穿过靶心的角度是一个二次方程的两个根：低抛与高抛。初速刚好够时判别式为零，两解合并成一个。这不是设计出来的教学点，是方程本身的性质。"}],"findings":{"mass":{"severity":"high","title":"你在调一个不起作用的变量","phenomenon":"你动了 {n} 次质量滑块。","meaning":"真空里，运动方程中没有质量这一项——1 kg 和 10 kg 的球走同一条弧线。这个滑块是空的。你不是算错了，是模型里多了一个变量。","next":"把质量固定在任意值，只调角度和初速。如果结果一模一样，你就亲手验证了它跟质量无关。"},"forty-five":{"severity":"high","title":"45° 的前提不成立","phenomenon":"你有 {n} 发把角度压在 45° 附近，只改初速。","meaning":"45° 是「平地、同高度、无阻力」时的最远角。这个靶比发射点高 6.5 m，最省力角是 49.4°。更要命的是：在 45° 上继续加初速，球会从靶的上方越飞越远——你加的力全去了高处。","next":"先松开角度。用 22 m/s 附近的低速试 46° 到 53°，看命中窗口在哪。"},"two-branches":{"severity":"medium","title":"你只找到了一半答案","phenomenon":"你的 {n} 次命中全在 49.4° 的同一侧。","meaning":"给定初速，穿过靶心的角度一般有两个：一个低抛、一个高抛。你找到的是其中一个。","next":"保持初速不变，把角度往另一侧推。初速 30 m/s 时，两个解分别在 23° 和 76° 附近。"},"search":{"severity":"medium","title":"你在搜索，不是在计算","phenomenon":"{shots} 发，角度方向来回改了 {reversals} 次。","meaning":"这是二分查找的形状：不知道往哪边偏，所以两边各试一下再收窄。它能中靶，但换一个靶要重来一遍——你拿到的是这一题的答案，不是这类题的方法。","next":"下一次发射前，先说出你预期球会落在靶的上方还是下方。预期错了比打偏更有价值。"},"both-branches":{"severity":"good","title":"你把两个解都找出来了","phenomenon":"你的命中同时出现在 49.4° 的两侧：低抛 {low}° 与高抛 {high}°。","meaning":"穿过靶心的角度是一个二次方程的两个根。命中一次就停手的人不会知道另一个根存在；你去找了，说明你要的不是这一题的答案，是这类题的结构。","next":"把初速一点点往下压，看两个解怎么互相靠拢——到 21.9 m/s 它们会合成一个，再低就一个都没有。"},"computed":{"severity":"good","title":"你是先算后调的","phenomenon":"第 {n} 发就命中，全程没碰质量。","meaning":"少量试射 + 单向修正，是「心里有模型」的形状。你没有把质量当成变量，说明你知道运动学与质量无关。","next":"试试主动找第二个解：同样的初速，另一个角度也能中。"},"lucky45":{"severity":"medium","title":"这一发是这个靶上 45° 唯一能中的地方","phenomenon":"你用 45° 附近、{v0} m/s 命中了。","meaning":"在这个靶上，45° 只在 22 m/s 上下一个非常窄的初速带里能穿过靶心。中了，但它靠的是这条带子恰好存在，换个靶就没有了。","next":"把初速加到 26 m/s，角度仍留在 45°，看会偏到哪里。"},"clean":{"severity":"good","title":"没有触发任何误概念标记","phenomenon":"{shots} 发，没有落入质量、45°、单解这三类里的任何一类。","meaning":"过程数据上看不出问题。","next":"换个更难的：把初速压到 22 m/s 以下再试，会发现根本打不到——那个临界初速是可以算出来的。"}},"replays":[{"id":"A","name":"学生 A","blurb":"3 发，命中 2 次","shots":[{"angleDeg":30,"v0":28,"mass":2},{"angleDeg":25.5,"v0":28,"mass":2},{"angleDeg":73.5,"v0":28,"mass":2}]},{"id":"B","name":"学生 B","blurb":"16 发，命中 1 次","shots":[{"angleDeg":45,"v0":30,"mass":2},{"angleDeg":45,"v0":34,"mass":2},{"angleDeg":45,"v0":34,"mass":6},{"angleDeg":50,"v0":34,"mass":6},{"angleDeg":40,"v0":34,"mass":6},{"angleDeg":40,"v0":26,"mass":6},{"angleDeg":35,"v0":26,"mass":9},{"angleDeg":55,"v0":26,"mass":9},{"angleDeg":32,"v0":26,"mass":9},{"angleDeg":32,"v0":30,"mass":3},{"angleDeg":44,"v0":30,"mass":3},{"angleDeg":20,"v0":30,"mass":3},{"angleDeg":26,"v0":30,"mass":3},{"angleDeg":21,"v0":30,"mass":7},{"angleDeg":25,"v0":30,"mass":7},{"angleDeg":23,"v0":30,"mass":7}]}],"replayNote":"两位「学生」的操作序列是模拟的，不是真实学生数据。命中与脱靶由确定层现场算，没有预先写死——你看到的每一条弧线，都是方程当场解出来的。","howItWorks":[{"h":"分数分不开的，过程能分开","p":"两位学生都命中了。如果只记分，他们是同一个结果。屏幕上的弹道不一样——那就是过程数据，它不是一张表，是一把弧线。"},{"h":"判定归代码，说话归内容层","p":"命中与否、有几个解、最省力角是多少，全部由方程算出，模型不参与。诊断的措辞写在一个 JSON 里，可以被老师逐字改掉。两层之间只传数字。"},{"h":"诊断是规则，不是现场生成","p":"这一页不调用任何 AI 接口。诊断由六条确定性规则跑在你的操作序列上，命中哪条就取哪段预先写好的话。同样的操作永远得到同样的诊断——这是有意的，诊断必须可复现。"}]};</script>
+<script>/* =====================================================================
+ * 确定层 —— 物理引擎
+ *
+ * 这个文件不知道「教学」是什么。它不读内容层，不产出任何一句话，
+ * 只回答一件事：给定发射条件，物体会走到哪里。
+ *
+ * 为什么要这么切：STEM Bench 的架构命题是 "Authored by AI, over fixed
+ * physics" —— AI 只写教学层，物理层必须固定。固定不等于写死，等于
+ * **可被独立验证**：本文件每一条都能用解析解对拍、用守恒量检查。
+ * 测试里逐条做了，并且每道闸都注入过错误证明它会响。
+ *
+ * 模型：真空抛体，无空气阻力，重力恒定 g = 9.8 m/s²。
+ * 这是明示的简化 —— 页面上必须写出来，不能让学生以为这就是现实。
+ * ===================================================================== */
+
+window.Engine = (function () {
+  "use strict";
+
+  const G = 9.8; // m/s²
+  const DT = 0.002; // s，采样步长。只影响画得多细，不影响闭式解本身
+
+  const rad = (d) => (d * Math.PI) / 180;
+  const deg = (r) => (r * 180) / Math.PI;
+
+  /* ------------------------------------------------------------------
+   * 闭式解
+   *   x(t) = v0·cosθ·t
+   *   y(t) = h0 + v0·sinθ·t − ½·g·t²
+   *
+   * 参数表里没有 m。这不是省略。
+   * 真空中运动学与质量无关，而这台 bench 的界面上偏偏有一个质量滑块 ——
+   * 那个滑块什么也不做，它是给学生的陷阱。
+   * 所以「质量不进方程」是一条产品承诺，必须被测试保护（行为闸 + 结构闸各一道）。
+   * ------------------------------------------------------------------ */
+  function stateAt(t, shot) {
+    const { v0, angleDeg, h0 = 0 } = shot;
+    const th = rad(angleDeg);
+    return {
+      t,
+      x: v0 * Math.cos(th) * t,
+      y: h0 + v0 * Math.sin(th) * t - 0.5 * G * t * t,
+      vx: v0 * Math.cos(th),
+      vy: v0 * Math.sin(th) - G * t,
+    };
+  }
+
+  /** 落回 y=0 的时刻。解二次方程取正根，不靠步长凑。 */
+  function flightTime(shot) {
+    const { v0, angleDeg, h0 = 0 } = shot;
+    const vy0 = v0 * Math.sin(rad(angleDeg));
+    return (vy0 + Math.sqrt(vy0 * vy0 + 2 * G * h0)) / G;
+  }
+
+  /** 采样整条弹道。末点用精确落地时刻补上，保证最后一点正好在 y=0。 */
+  function trajectory(shot, opts) {
+    const dt = (opts && opts.dt) || DT;
+    const T = flightTime(shot);
+    const pts = [];
+    for (let t = 0; t < T; t += dt) pts.push(stateAt(t, shot));
+    pts.push(stateAt(T, shot));
+    return pts;
+  }
+
+  /** 最高点。vy=0 的时刻。 */
+  function apex(shot) {
+    const t = (shot.v0 * Math.sin(rad(shot.angleDeg))) / G;
+    return stateAt(Math.max(t, 0), shot);
+  }
+
+  /** 落地水平距离。 */
+  function range(shot) {
+    return stateAt(flightTime(shot), shot).x;
+  }
+
+  /* ------------------------------------------------------------------
+   * 命中判定 —— 弹道到靶心的最近距离
+   *
+   * 先粗扫再三分细化。粗扫用来定位极小值所在的那一段（距离平方在全局上
+   * 未必单峰，但在极小值邻域内是），三分只在那一段里做。
+   * 判定必须是几何的，不能"看起来过去了就算过去了"。
+   * ------------------------------------------------------------------ */
+  function closestApproach(shot, target) {
+    const T = flightTime(shot);
+    const n = 400;
+    const d2 = (t) => {
+      const s = stateAt(t, shot);
+      return (s.x - target.x) ** 2 + (s.y - target.y) ** 2;
+    };
+
+    let bi = 0;
+    let best = Infinity;
+    for (let i = 0; i <= n; i++) {
+      const v = d2((T * i) / n);
+      if (v < best) {
+        best = v;
+        bi = i;
+      }
+    }
+
+    let lo = (T * Math.max(bi - 1, 0)) / n;
+    let hi = (T * Math.min(bi + 1, n)) / n;
+    for (let k = 0; k < 80; k++) {
+      const m1 = lo + (hi - lo) / 3;
+      const m2 = hi - (hi - lo) / 3;
+      if (d2(m1) < d2(m2)) hi = m2;
+      else lo = m1;
+    }
+    const t = (lo + hi) / 2;
+    return { t, distance: Math.sqrt(d2(t)), state: stateAt(t, shot) };
+  }
+
+  /** 一发的完整结果。UI 与诊断层都只吃这个结构。 */
+  function evaluate(shot, target) {
+    const near = closestApproach(shot, target);
+    return {
+      hit: near.distance <= target.radius,
+      distance: near.distance,
+      closestAt: near.state,
+      flightTime: flightTime(shot),
+      range: range(shot),
+      apex: apex(shot),
+    };
+  }
+
+  /* ------------------------------------------------------------------
+   * 给定初速，哪些角度能穿过靶心
+   *
+   *   Y = h0 + X·tanθ − (g·X²/(2v0²))·(1+tan²θ)
+   * 令 u = tanθ、k = g·X²/(2v0²)：
+   *   k·u² − X·u + (Y − h0 + k) = 0
+   *
+   * 判别式 > 0 → 两个角度（低抛 / 高抛）
+   * 判别式 = 0 → 只有一个（初速刚好够）
+   * 判别式 < 0 → 打不到
+   *
+   * 「两解」和「初速刚好够时两解合并」不是我编的教学点，
+   * 是这个判别式的性质。正确的引擎才会长出这个现象。
+   * ------------------------------------------------------------------ */
+  function anglesForTarget(v0, target, h0) {
+    const X = target.x;
+    const Y = target.y;
+    const k = (G * X * X) / (2 * v0 * v0);
+    const disc = X * X - 4 * k * (Y - h0 + k);
+    if (disc < 0) return [];
+    const r = Math.sqrt(disc);
+    const lo = deg(Math.atan((X - r) / (2 * k)));
+    const hi = deg(Math.atan((X + r) / (2 * k)));
+    return disc === 0 ? [lo] : [lo, hi];
+  }
+
+  /** 打到靶心所需的最小初速，以及那一发唯一的角度。 */
+  function minimumSpeed(target, h0) {
+    const dy = target.y - h0;
+    const X = target.x;
+    const v0 = Math.sqrt(G * (dy + Math.hypot(X, dy)));
+    const angleDeg = deg(Math.atan((dy + Math.hypot(X, dy)) / X));
+    return { v0, angleDeg };
+  }
+
+  /* ------------------------------------------------------------------
+   * 以下两个只给测试用，UI 不调 —— 它们是闸，不是功能
+   * ------------------------------------------------------------------ */
+
+  /** 机械能。真空抛体里它必须守恒；不守恒说明 g 的符号或速度更新错了。 */
+  function energy(shot, mass, t) {
+    const s = stateAt(t, shot);
+    return 0.5 * mass * (s.vx * s.vx + s.vy * s.vy) + mass * G * s.y;
+  }
+
+  /** RK4 数值积分同一个 ODE。用来和闭式解对拍，专抓「闭式解写错了」。 */
+  function integrateRK4(shot, dt) {
+    const th = rad(shot.angleDeg);
+    let y = [0, shot.h0 || 0, shot.v0 * Math.cos(th), shot.v0 * Math.sin(th)];
+    const f = (s) => [s[2], s[3], 0, -G];
+    const add = (a, b, c) => a.map((v, i) => v + c * b[i]);
+    const T = flightTime(shot);
+    const out = [{ t: 0, x: y[0], y: y[1], vx: y[2], vy: y[3] }];
+    for (let t = 0; t < T - 1e-12; t += dt) {
+      const h = Math.min(dt, T - t);
+      const k1 = f(y);
+      const k2 = f(add(y, k1, h / 2));
+      const k3 = f(add(y, k2, h / 2));
+      const k4 = f(add(y, k3, h));
+      y = y.map((v, i) => v + (h / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+      out.push({ t: t + h, x: y[0], y: y[1], vx: y[2], vy: y[3] });
+    }
+    return out;
+  }
+
+  return {
+    G,
+    stateAt,
+    flightTime,
+    trajectory,
+    apex,
+    range,
+    closestApproach,
+    evaluate,
+    anglesForTarget,
+    minimumSpeed,
+    energy,
+    integrateRK4,
+  };
+})();
+</script>
+<script>/* =====================================================================
+ * 诊断层 —— 确定性规则，零 AI 调用
+ *
+ * 输入：一串发射记录（角度、初速、质量、命中与否）+ 质量滑块被动的次数
+ * 输出：命中了哪几条规则，以及内容层里对应的那段话
+ *
+ * 为什么不调模型：诊断必须**可复现**。同一串操作永远得到同一份诊断，
+ * 老师才能拿它跟学生对质、才能横向比较两个学生。
+ * 模型可以帮我们**写**这些话（内容层就是给它写的），但不该在学生点下
+ * 「生成报告」的那一刻现场编。
+ *
+ * 这一层也不算物理。它只吃 Engine 已经算好的结论。
+ * ===================================================================== */
+
+window.Diagnose = (function () {
+  "use strict";
+
+  const NEAR45 = [43, 47]; // 「45° 附近」的定义
+  const LUCKY45_V0 = [21.5, 23.0]; // 这个靶上 45° 唯一能中的初速带
+
+  /** 从发射序列里把要用的量算出来。全部是可复算的计数，不含判断。 */
+  function telemetry(shots, massInteractions, world, Engine) {
+    const crit = Engine.minimumSpeed(world.target, world.launchHeight);
+
+    const hits = shots.filter((s) => s.hit);
+    const near45 = shots.filter(
+      (s) => s.angleDeg >= NEAR45[0] && s.angleDeg <= NEAR45[1]
+    );
+
+    let reversals = 0;
+    let prevSign = 0;
+    for (let i = 1; i < shots.length; i++) {
+      const d = shots[i].angleDeg - shots[i - 1].angleDeg;
+      const sign = Math.sign(d);
+      if (sign !== 0) {
+        if (prevSign !== 0 && sign !== prevSign) reversals++;
+        prevSign = sign;
+      }
+    }
+
+    const firstHit = shots.findIndex((s) => s.hit);
+
+    return {
+      shots: shots.length,
+      hits: hits.length,
+      firstHitIndex: firstHit === -1 ? null : firstHit + 1,
+      massInteractions,
+      reversals,
+      near45Count: near45.length,
+      near45DistinctV0: new Set(near45.map((s) => s.v0)).size,
+      critAngle: crit.angleDeg,
+      critV0: crit.v0,
+      hitsBelowCrit: hits.filter((s) => s.angleDeg < crit.angleDeg).length,
+      hitsAboveCrit: hits.filter((s) => s.angleDeg >= crit.angleDeg).length,
+      lowHitAngle: Math.min.apply(null, hits.map((s) => s.angleDeg)),
+      highHitAngle: Math.max.apply(null, hits.map((s) => s.angleDeg)),
+      luckyHit:
+        hits.find(
+          (s) =>
+            s.angleDeg >= NEAR45[0] &&
+            s.angleDeg <= NEAR45[1] &&
+            s.v0 >= LUCKY45_V0[0] &&
+            s.v0 <= LUCKY45_V0[1]
+        ) || null,
+    };
+  }
+
+  /* --- 六条规则。每条只看 telemetry，不看物理。------------------------- */
+  const RULES = [
+    {
+      key: "mass",
+      fires: (t) => t.massInteractions >= 3,
+      fill: (t) => ({ n: t.massInteractions }),
+    },
+    {
+      key: "forty-five",
+      fires: (t) => t.near45Count >= 4 && t.near45DistinctV0 >= 2,
+      fill: (t) => ({ n: t.near45Count }),
+    },
+    {
+      key: "lucky45",
+      fires: (t) => t.luckyHit !== null,
+      fill: (t) => ({ v0: t.luckyHit.v0 }),
+    },
+    {
+      key: "two-branches",
+      fires: (t) =>
+        t.hits >= 1 && (t.hitsBelowCrit === 0 || t.hitsAboveCrit === 0),
+      fill: (t) => ({ n: t.hits }),
+    },
+    {
+      key: "search",
+      fires: (t) => t.shots >= 12 && t.reversals >= 5,
+      fill: (t) => ({ shots: t.shots, reversals: t.reversals }),
+    },
+    {
+      key: "both-branches",
+      fires: (t) => t.hitsBelowCrit >= 1 && t.hitsAboveCrit >= 1,
+      fill: (t) => ({
+        low: t.lowHitAngle.toFixed(1),
+        high: t.highHitAngle.toFixed(1),
+      }),
+    },
+    {
+      key: "computed",
+      fires: (t) =>
+        t.firstHitIndex !== null &&
+        t.firstHitIndex <= 3 &&
+        t.massInteractions === 0,
+      fill: (t) => ({ n: t.firstHitIndex }),
+    },
+  ];
+
+  const ORDER = { high: 0, medium: 1, good: 2 };
+
+  function fillTemplate(str, vars) {
+    return str.replace(/\{(\w+)\}/g, (m, k) =>
+      vars[k] === undefined ? m : String(vars[k])
+    );
+  }
+
+  /**
+   * @returns {{telemetry:object, findings:Array}}
+   */
+  function run(shots, massInteractions, world, content, Engine) {
+    const t = telemetry(shots, massInteractions, world, Engine);
+    const findings = [];
+
+    for (const rule of RULES) {
+      if (!rule.fires(t)) continue;
+      const src = content.findings[rule.key];
+      const vars = rule.fill(t);
+      findings.push({
+        key: rule.key,
+        severity: src.severity,
+        title: src.title,
+        phenomenon: fillTemplate(src.phenomenon, vars),
+        meaning: src.meaning,
+        next: src.next,
+      });
+    }
+
+    if (findings.length === 0) {
+      const src = content.findings.clean;
+      findings.push({
+        key: "clean",
+        severity: src.severity,
+        title: src.title,
+        phenomenon: fillTemplate(src.phenomenon, { shots: t.shots }),
+        meaning: src.meaning,
+        next: src.next,
+      });
+    }
+
+    findings.sort((a, b) => ORDER[a.severity] - ORDER[b.severity]);
+    return { telemetry: t, findings };
+  }
+
+  return { run, telemetry, RULES };
+})();
+</script>
+<script>/* =====================================================================
+ * 界面层
+ *
+ * 它只做三件事：把 Engine 算出来的点画出来、把学生的操作记下来、
+ * 把 Diagnose 的结论排版。**它自己不算物理，也不写教学话。**
+ *
+ * 一条画面上的纪律：x 与 y 必须等比例。
+ * 把抛物线横向拉伸会让它"看起来更好看"，但那是一句物理谎言——
+ * 45° 的弧线一压就不像 45° 了。宁可留黑边。
+ * ===================================================================== */
+
+(function () {
+  "use strict";
+
+  var E = window.Engine;
+  var D = window.Diagnose;
+  var C = window.Content;
+
+  var W = C.world;
+  var TARGET = W.target;
+  var H0 = W.launchHeight;
+  var VIEW = { x0: -3, x1: 50, y0: -1.5, y1: 40 };
+  var SPAN_X = VIEW.x1 - VIEW.x0;
+  var SPAN_Y = VIEW.y1 - VIEW.y0;
+
+  var CRIT = E.minimumSpeed(TARGET, H0);
+
+  /* ── 渲染器 ────────────────────────────────────────────────────── */
+  function makeRenderer(canvas, compact) {
+    var ctx = canvas.getContext("2d");
+    var w = 0;
+    var h = 0;
+
+    function resize() {
+      var cssW = canvas.clientWidth || canvas.parentNode.clientWidth;
+      var cssH = (cssW * SPAN_Y) / SPAN_X;
+      var dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+      canvas.style.height = cssH + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      w = cssW;
+      h = cssH;
+    }
+
+    var px = function (x) {
+      return ((x - VIEW.x0) / SPAN_X) * w;
+    };
+    var py = function (y) {
+      return h - ((y - VIEW.y0) / SPAN_Y) * h;
+    };
+
+    function draw(scene) {
+      if (!w) resize();
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#0e1319";
+      ctx.fillRect(0, 0, w, h);
+
+      // 网格：每 5 米一格
+      ctx.strokeStyle = "#1b232d";
+      ctx.lineWidth = 1;
+      for (var gx = 0; gx <= 50; gx += 5) {
+        ctx.beginPath();
+        ctx.moveTo(px(gx), 0);
+        ctx.lineTo(px(gx), h);
+        ctx.stroke();
+      }
+      for (var gy = 0; gy <= 40; gy += 5) {
+        ctx.beginPath();
+        ctx.moveTo(0, py(gy));
+        ctx.lineTo(w, py(gy));
+        ctx.stroke();
+      }
+
+      // 地面
+      ctx.strokeStyle = "#3a4757";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, py(0));
+      ctx.lineTo(w, py(0));
+      ctx.stroke();
+
+      if (!compact) {
+        ctx.fillStyle = "#5b6874";
+        ctx.font = '11px ui-monospace, Menlo, Consolas, monospace';
+        ctx.textAlign = "center";
+        for (var tx = 10; tx <= 40; tx += 10) {
+          ctx.fillText(tx + " m", px(tx), py(0) + 15);
+        }
+      }
+
+      // 发射台
+      ctx.strokeStyle = "#7a8899";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(px(0), py(0));
+      ctx.lineTo(px(0), py(H0));
+      ctx.stroke();
+
+      // 瞄准指示：只给方向，不给弹道
+      if (scene.aimDeg != null) {
+        var r = (scene.aimDeg * Math.PI) / 180;
+        var L = 4.2;
+        ctx.strokeStyle = "#f59e0b";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(px(0), py(H0));
+        ctx.lineTo(px(L * Math.cos(r)), py(H0 + L * Math.sin(r)));
+        ctx.stroke();
+      }
+
+      // 靶
+      var hitNow = scene.currentHit;
+      ctx.strokeStyle = hitNow ? "#22c55e" : "#ef4444";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(px(TARGET.x), py(TARGET.y), (TARGET.radius / SPAN_X) * w, 0, 6.2832);
+      ctx.stroke();
+      ctx.fillStyle = hitNow ? "rgba(34,197,94,0.22)" : "rgba(239,68,68,0.12)";
+      ctx.fill();
+      ctx.strokeStyle = "#54606d";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(px(TARGET.x), py(0));
+      ctx.lineTo(px(TARGET.x), py(TARGET.y - TARGET.radius));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 弹道残影
+      var trails = scene.trails || [];
+      for (var i = 0; i < trails.length; i++) {
+        var t = trails[i];
+        var last = i === trails.length - 1 && scene.highlightLast;
+        ctx.strokeStyle = last
+          ? t.hit
+            ? "#22c55e"
+            : "#f59e0b"
+          : t.hit
+          ? "rgba(34,197,94,0.55)"
+          : "rgba(148,163,184,0.34)";
+        ctx.lineWidth = last ? 2.6 : compact ? 1.4 : 1.8;
+        ctx.beginPath();
+        var upto = last && scene.progress != null ? scene.progress : 1;
+        var n = Math.max(2, Math.floor(t.points.length * upto));
+        for (var j = 0; j < n; j++) {
+          var p = t.points[j];
+          if (j === 0) ctx.moveTo(px(p.x), py(p.y));
+          else ctx.lineTo(px(p.x), py(p.y));
+        }
+        ctx.stroke();
+
+        if (last && scene.progress != null && n >= 2) {
+          var b = t.points[n - 1];
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(px(b.x), py(b.y), compact ? 2.5 : 4, 0, 6.2832);
+          ctx.fill();
+        }
+      }
+    }
+
+    window.addEventListener("resize", function () {
+      resize();
+      if (renderer.last) draw(renderer.last);
+    });
+
+    var renderer = {
+      draw: function (scene) {
+        renderer.last = scene;
+        draw(scene);
+      },
+      resize: resize,
+      last: null,
+    };
+    resize();
+    return renderer;
+  }
+
+  /* ── 一发的完整记录 ────────────────────────────────────────────── */
+  function fireShot(angleDeg, v0, mass) {
+    var shot = { v0: v0, angleDeg: angleDeg, h0: H0 };
+    var res = E.evaluate(shot, TARGET);
+    return {
+      angleDeg: angleDeg,
+      v0: v0,
+      mass: mass,
+      hit: res.hit,
+      distance: res.distance,
+      flightTime: res.flightTime,
+      points: E.trajectory(shot, { dt: 0.02 }),
+      clipped: E.apex(shot).y > VIEW.y1,
+    };
+  }
+
+  /* ── 回放：内容层只存操作序列，命中由引擎现场算 ────────────────── */
+  function buildReplay(rp) {
+    var shots = [];
+    var massInteractions = 0;
+    for (var i = 0; i < rp.shots.length; i++) {
+      var s = rp.shots[i];
+      if (i > 0 && s.mass !== rp.shots[i - 1].mass) massInteractions++;
+      shots.push(fireShot(s.angleDeg, s.v0, s.mass));
+    }
+    var out = D.run(shots, massInteractions, W, C, E);
+    return {
+      id: rp.id,
+      name: rp.name,
+      blurb: rp.blurb,
+      shots: shots,
+      massInteractions: massInteractions,
+      report: out,
+    };
+  }
+
+  /* ── 诊断卡排版 ────────────────────────────────────────────────── */
+  var SEV_LABEL = { high: "误概念", medium: "值得注意", good: "做对了" };
+
+  function renderFindings(el, findings) {
+    el.innerHTML = "";
+    for (var i = 0; i < findings.length; i++) {
+      var f = findings[i];
+      var d = document.createElement("div");
+      d.className = "finding " + f.severity;
+      d.innerHTML =
+        '<span class="tag">' +
+        SEV_LABEL[f.severity] +
+        "</span><h4></h4>" +
+        '<p class="ph"></p><p class="mn"></p>' +
+        '<p class="next"><b>下一步：</b><span></span></p>';
+      d.querySelector("h4").textContent = f.title;
+      d.querySelector(".ph").textContent = f.phenomenon;
+      d.querySelector(".mn").textContent = f.meaning;
+      d.querySelector(".next span").textContent = f.next;
+      el.appendChild(d);
+    }
+  }
+
+  /* ── 启动 ──────────────────────────────────────────────────────── */
+  document.addEventListener("DOMContentLoaded", function () {
+    /* 文案注入（内容层来源） */
+    document.getElementById("bench-title").textContent = C.bench.title;
+    document.getElementById("claim").textContent = C.bench.claim;
+    document.getElementById("task-goal").textContent = C.task.goal;
+    document.getElementById("task-hint").textContent = C.task.hint;
+    document.getElementById("model-note").textContent = C.task.modelNote;
+    document.getElementById("replay-note").textContent = C.replayNote;
+    document.getElementById("crit-line").textContent =
+      "这个靶的最省力角是 " +
+      CRIT.angleDeg.toFixed(1) +
+      "°，对应的最小初速是 " +
+      CRIT.v0.toFixed(1) +
+      " m/s —— 两个数都是方程解出来的，不是写死的。";
+
+    var howEl = document.getElementById("how");
+    for (var i = 0; i < C.howItWorks.length; i++) {
+      var it = C.howItWorks[i];
+      var d = document.createElement("div");
+      d.innerHTML = "<h4></h4><p></p>";
+      d.querySelector("h4").textContent = it.h;
+      d.querySelector("p").textContent = it.p;
+      howEl.appendChild(d);
+    }
+
+    var trapsEl = document.getElementById("traps");
+    for (var k = 0; k < C.traps.length; k++) {
+      var tp = C.traps[k];
+      var td = document.createElement("div");
+      td.innerHTML = '<h4></h4><p class="v"></p><p></p>';
+      td.querySelector("h4").textContent = tp.name;
+      td.querySelector(".v").textContent = tp.visible;
+      td.querySelectorAll("p")[1].textContent = tp.mechanism;
+      td.querySelector(".v").style.color = "#7c838c";
+      td.querySelector(".v").style.marginBottom = "8px";
+      trapsEl.appendChild(td);
+    }
+
+    /* 控制台（由内容层的 controls 定义生成） */
+    var state = {
+      angle: W.controls.angle.default,
+      v0: W.controls.v0.default,
+      mass: W.controls.mass.default,
+      shots: [],
+      massInteractions: 0,
+      animating: false,
+      myReport: null,
+    };
+
+    var ctrlBox = document.getElementById("controls");
+    var inputs = {};
+    ["angle", "v0", "mass"].forEach(function (key) {
+      var c = W.controls[key];
+      var wrap = document.createElement("div");
+      wrap.className = "ctrl";
+      wrap.innerHTML =
+        '<div class="row"><label></label><span class="val"></span></div>' +
+        '<input type="range">';
+      wrap.querySelector("label").textContent = c.label;
+      var inp = wrap.querySelector("input");
+      inp.min = c.min;
+      inp.max = c.max;
+      inp.step = c.step;
+      inp.value = c[key === "angle" ? "default" : "default"];
+      inp.value = c.default;
+      inp.id = "in-" + key;
+      var val = wrap.querySelector(".val");
+      var show = function () {
+        val.textContent = Number(inp.value).toFixed(1) + " " + c.unit;
+      };
+      show();
+      inp.addEventListener("input", function () {
+        state[key] = Number(inp.value);
+        show();
+        redraw();
+      });
+      // 计数用 change（一次拖动算一次操作），不用 input（一次拖动几十下）
+      inp.addEventListener("change", function () {
+        if (key === "mass") state.massInteractions++;
+      });
+      inputs[key] = inp;
+      ctrlBox.appendChild(wrap);
+    });
+
+    var field = makeRenderer(document.getElementById("field"), false);
+    var clipflag = document.getElementById("clipflag");
+    var fireBtn = document.getElementById("fire");
+    var reportBtn = document.getElementById("report");
+    var findingsEl = document.getElementById("findings");
+    var reportSub = document.getElementById("report-sub");
+
+    var elShots = document.getElementById("s-shots");
+    var elHits = document.getElementById("s-hits");
+    var elMiss = document.getElementById("s-miss");
+    var elBest = document.getElementById("s-best");
+
+    function trails(list) {
+      return list.map(function (s) {
+        return { points: s.points, hit: s.hit };
+      });
+    }
+
+    function redraw(progress) {
+      field.draw({
+        trails: trails(state.shots),
+        highlightLast: true,
+        progress: progress,
+        aimDeg: state.animating ? null : state.angle,
+        currentHit:
+          state.shots.length > 0 &&
+          state.shots[state.shots.length - 1].hit &&
+          (progress == null || progress >= 1),
+      });
+    }
+
+    function updateStats() {
+      var hits = state.shots.filter(function (s) {
+        return s.hit;
+      });
+      elShots.textContent = state.shots.length;
+      elHits.textContent = hits.length;
+      elHits.className = "v" + (hits.length ? " hit" : "");
+      var last = state.shots[state.shots.length - 1];
+      elMiss.textContent = last ? last.distance.toFixed(2) + " m" : "—";
+      var best = state.shots.reduce(function (a, s) {
+        return Math.min(a, s.distance);
+      }, Infinity);
+      elBest.textContent = isFinite(best) ? best.toFixed(2) + " m" : "—";
+
+      var n = state.shots.length;
+      reportBtn.disabled = n < 3;
+      reportBtn.textContent =
+        n < 3 ? "生成过程报告（还需 " + (3 - n) + " 发）" : "生成我的过程报告";
+    }
+
+    fireBtn.addEventListener("click", function () {
+      if (state.animating) return;
+      var s = fireShot(state.angle, state.v0, state.mass);
+      state.shots.push(s);
+      state.animating = true;
+      fireBtn.disabled = true;
+      clipflag.className = "clipflag" + (s.clipped ? " on" : "");
+
+      var dur = Math.min(1400, Math.max(600, s.flightTime * 320));
+      var t0 = performance.now();
+      (function step(now) {
+        var p = Math.min(1, (now - t0) / dur);
+        redraw(p);
+        if (p < 1) requestAnimationFrame(step);
+        else {
+          state.animating = false;
+          fireBtn.disabled = false;
+          redraw();
+          updateStats();
+        }
+      })(t0);
+      updateStats();
+    });
+
+    /* 回放与对照卡 */
+    var replays = C.replays.map(buildReplay);
+    var cards = [];
+    var compareEl = document.getElementById("compare");
+
+    function makeCard(cfg) {
+      var card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML =
+        '<canvas class="mini"></canvas><div class="body">' +
+        '<p class="who"></p><p class="nums"></p><p class="verdict"></p>' +
+        "<button></button></div>";
+      compareEl.appendChild(card);
+      var r = makeRenderer(card.querySelector("canvas"), true);
+      var obj = {
+        el: card,
+        renderer: r,
+        who: card.querySelector(".who"),
+        nums: card.querySelector(".nums"),
+        verdict: card.querySelector(".verdict"),
+        btn: card.querySelector("button"),
+        id: cfg.id,
+      };
+      cards.push(obj);
+      return obj;
+    }
+
+    function paintCard(card, data) {
+      card.renderer.draw({ trails: trails(data.shots), highlightLast: false });
+      card.who.textContent = data.name;
+      var hits = data.shots.filter(function (s) {
+        return s.hit;
+      }).length;
+      card.nums.textContent =
+        data.shots.length + " 发 · 命中 " + hits + " · 动过质量 " + data.massInteractions + " 次";
+      card.verdict.textContent = data.report.findings
+        .map(function (f) {
+          return f.title;
+        })
+        .join("；");
+      card.btn.disabled = false;
+      card.btn.textContent = "看" + data.name + "的报告";
+      card.data = data;
+    }
+
+    function showReport(card) {
+      cards.forEach(function (c) {
+        c.el.className = "card" + (c === card ? " active" : "");
+      });
+      renderFindings(findingsEl, card.data.report.findings);
+      var t = card.data.report.telemetry;
+      reportSub.textContent =
+        card.data.name +
+        "：" +
+        t.shots +
+        " 发，命中 " +
+        t.hits +
+        " 次，角度方向来回改了 " +
+        t.reversals +
+        " 次，动过质量滑块 " +
+        t.massInteractions +
+        " 次。以下由六条确定性规则跑出来，没有调用任何模型。";
+    }
+
+    replays.forEach(function (rp) {
+      var card = makeCard(rp);
+      paintCard(card, rp);
+      card.btn.addEventListener("click", function () {
+        showReport(card);
+      });
+    });
+
+    var myCard = makeCard({ id: "me" });
+    myCard.who.textContent = "你";
+    myCard.nums.textContent = "还没有发射";
+    myCard.verdict.textContent = "打完至少三发，再生成报告。";
+    myCard.btn.textContent = "看我的报告";
+    myCard.btn.disabled = true;
+    myCard.renderer.draw({ trails: [] });
+    myCard.btn.addEventListener("click", function () {
+      showReport(myCard);
+    });
+
+    reportBtn.addEventListener("click", function () {
+      var out = D.run(state.shots, state.massInteractions, W, C, E);
+      paintCard(myCard, {
+        name: "你",
+        shots: state.shots,
+        massInteractions: state.massInteractions,
+        report: out,
+      });
+      showReport(myCard);
+      document
+        .getElementById("report-sec")
+        .scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    updateStats();
+    redraw();
+  });
+})();
+</script>
+</body>
+</html>
