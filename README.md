@@ -11,6 +11,7 @@ CocoRobo 教育产品原型的**公开演示**。
 | 演示 | 说明 | 地址 |
 |---|---|---|
 | 数学动画内容库 | 输入教学主题 → 输出可在课堂播放的数学动画，由 [Manim](https://www.manim.community/) 离线预生成 | [`/math-animation/`](https://tonyxinvip.github.io/showcase/math-animation/) |
+| 物理实验台 | 老师搭力学实验并出题 → 学生先预测再作答 → 回执码交回老师。基于 [Matter.js](https://github.com/liabru/matter-js)，出题时显示引擎与解析解的偏差 | [`/physics-lab/`](https://tonyxinvip.github.io/showcase/physics-lab/) |
 
 ---
 
