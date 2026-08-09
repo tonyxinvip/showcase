@@ -77,6 +77,8 @@ main{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px;
 .obj-meta{font-size:12px;color:var(--ink-3);margin-top:3px}
 .obj-met{border-color:#bfe0ca;background:var(--good-bg)}
 .obj-met .obj-meta{color:var(--good)}
+.obj-met_provisional{border-color:#d6dae0;background:#f4f5f6}
+.obj-met_provisional .obj-meta{color:#64748b}
 .obj-recovered{border-color:#bcd9f0;background:#eef5fb}
 .obj-recovered .obj-meta{color:#1d4ed8}
 .obj-in_progress{border-color:#f0d9ac;background:var(--warn-bg)}
@@ -113,6 +115,7 @@ footer.bottom .pubdate{margin-top:3px;font-size:13px;color:var(--ink-3)}
       <span class="badge done">判分由规则引擎完成，不经过大模型</span>
       <span class="badge todo">键角读数题只对「由对称性决定角度」的分子开放：实验测定的键角未经教研签核，系统会拒绝出题</span>
       <span class="badge todo">误解陷阱的效度未经验证，目前只做到人工过目</span>
+      <span class="badge todo">默认视角下中心原子的标签会被前方原子挡住，拖动旋转可看清</span>
     </div>
   </div>
 </header>
@@ -165,7 +168,7 @@ footer.bottom .pubdate{margin-top:3px;font-size:13px;color:var(--ink-3)}
     <li><b>操作真实对象，不是做选择题。</b>搭建题里学生自己决定放几个配体、几个孤对，构型按规则实时重排；读键角那一题是在模型上点两个原子量出来的。</li>
     <li><b>每一次操作当场判分。</b>右侧逐目标进度实时更新，每个动作产出一条 xAPI 证据。答错时系统会指出这是哪一种误解，而不是只说「不对」。</li>
     <li><b>判分不经过大模型。</b>分子几何、键角、干扰项、误解识别全部由价层电子对互斥的规则推出。最强的那个干扰项就是该分子的电子对几何名——它本来就在规则表里，不需要生成。</li>
-    <li><b>教学层的文案要过闸才能上。</b>题干与提示不允许携带答案或数值，不允许把答案写进提示，学习目标不允许与题型不符。任一条不过，整份内容拒收。</li>
+    <li><b>教学层的文案要过闸才能上。</b>题干与提示不允许出现答案名，也不允许出现「答出来会被判对」的数字；一份内容里前面的提示不许说出后面题目的答案。任一条不过，整份内容拒收。<br><span style="color:var(--ink-3);font-size:13px">这道闸做的是字面比对，不是语义判断——三级提示的最后一级按设计就该把人引到答案跟前，它拦的是「把答案说出来」，不是「让人推得出来」。</span></li>
   </ul>
 </div>
 </div>
@@ -181,7 +184,6 @@ footer.bottom .pubdate{margin-top:3px;font-size:13px;color:var(--ink-3)}
 window.__EMBEDDED_SPEC = {
   "benchId": "vsepr-01",
   "title": "价层电子对互斥：电子对几何与分子几何",
-  "_note": "这份规格是教学层，形状对应模型该产出的东西。它只指定考哪个分子、考什么、怎么说话。所有答案、干扰项、理想角由 engine/ 推出。规格里出现任何数值答案字段会被 GATE-2 拒收。",
   "tasks": [
     {
       "type": "build_domains",
@@ -230,7 +232,7 @@ window.__EMBEDDED_SPEC = {
       "hints": [
         "六个电子域对应的电子对几何是正八面体。",
         "两个孤对会尽量离得最远，占据相对的两个顶点。",
-        "把上下两个顶点上的孤对拿掉，剩下四个氟原子落在同一个平面内。"
+        "把两个孤对占掉的方向从八个电子域方向里划掉，再看剩下的氟原子各自指向哪里。"
       ]
     },
     {
@@ -565,12 +567,16 @@ const PLACEHOLDER_SIGNATURES = [
 function isValidSignature(sig) {
   if (sig === null || typeof sig !== 'object' || Array.isArray(sig)) return false;
   const { by, date, source } = sig;
-  if (typeof by !== 'string' || by.trim().length < 2) return false;
-  if (PLACEHOLDER_SIGNATURES.includes(by.trim().toLowerCase())) return false;
+  const clean = (x) => x.replace(/[\s\u200b-\u200f\u2060\ufeff\u3000]/g, '');
+  if (typeof by !== 'string' || clean(by).length < 2) return false;
+  if (PLACEHOLDER_SIGNATURES.includes(clean(by).toLowerCase())) return false;
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-  if (Number.isNaN(Date.parse(date))) return false;
-  if (typeof source !== 'string' || source.trim().length < 4) return false;
-  if (PLACEHOLDER_SIGNATURES.includes(source.trim().toLowerCase())) return false;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  if (parsed.toISOString().slice(0, 10) !== date) return false;
+  if (parsed.getTime() > Date.now()) return false;
+  if (typeof source !== 'string' || clean(source).length < 4) return false;
+  if (PLACEHOLDER_SIGNATURES.includes(clean(source).toLowerCase())) return false;
   return true;
 }
 
@@ -599,8 +605,8 @@ const OBJECTIVES = [
   },
   {
     id: 'OBJ-3',
-    zh: '判断孤对对键角的压缩方向',
-    detail: '孤对斥力大于成键电子对，把键角压到理想值以下',
+    zh: '读出键角，并判断孤对把它压向哪一侧',
+    detail: '孤对斥力大于成键电子对，把键角压到理想值以下；无孤对时键角等于理想值',
   },
 ];
 
@@ -679,6 +685,7 @@ function gradeDomainBuild(entryId, studentLigands, studentLonePairs) {
   return {
     objectiveId: 'OBJ-1',
     passed,
+    guessable: false,
     expected: { ligands: correctX, lonePairs: correctE, stericNumber: derived.stericNumber },
     actual: { ligands: studentLigands, lonePairs: studentLonePairs },
     misconception,
@@ -698,6 +705,7 @@ function gradeGeometryName(entryId, answerKey) {
   return {
     objectiveId: 'OBJ-2',
     passed,
+    guessable: true,
     expected: derived.molecularGeometry.key,
     actual: answerKey,
     misconception,
@@ -744,6 +752,7 @@ function gradeAngle(entryId, answerDeg) {
   return {
     objectiveId: 'OBJ-3',
     passed,
+    guessable: false,
     expected: { anyOf: acceptable, tolerance },
     actual: answerDeg,
     misconception,
@@ -756,6 +765,7 @@ function gradeCompressionDirection(entryId, answer) {
   return {
     objectiveId: 'OBJ-3',
     passed: answer === expected,
+    guessable: true,
     expected,
     actual: answer,
     misconception: null,
@@ -768,11 +778,16 @@ function summarize(results) {
     const attempted = hits.length;
     const passed = hits.filter((r) => r.passed === true).length;
     const latestPassed = hits.length > 0 && hits[hits.length - 1].passed === true;
+
+    const passedHits = hits.filter((r) => r.passed === true);
+    const hasUnguessableEvidence = passedHits.some((r) => r.guessable === false);
+    const enoughGuessable = passedHits.filter((r) => r.guessable !== false).length >= 2;
+
     let state = 'not_started';
     if (attempted > 0) {
-      if (passed === attempted) state = 'met';
-      else if (latestPassed) state = 'recovered';
-      else state = 'in_progress';
+      if (passed !== attempted) state = latestPassed ? 'recovered' : 'in_progress';
+      else if (hasUnguessableEvidence || enoughGuessable) state = 'met';
+      else state = 'met_provisional';
     }
     return {
       ...obj,
@@ -835,8 +850,49 @@ const TASK_TYPES = {
 const ALLOWED_TASK_KEYS = ['type', 'moleculeId', 'objectiveId', 'prompt', 'hints'];
 const ALLOWED_SPEC_KEYS = ['benchId', 'title', 'tasks', '_note'];
 
-const NUMERIC_ANSWER_PATTERN = /(\d+(\.\d+)?)\s*(°|度)/;
-const DOMAIN_COUNT_PATTERN = /(孤对|电子域|配体|成键电子对)\s*(数\s*)?(是|为|=|有)?\s*[0-9零一二三四五六七八九十]/;
+const FULLWIDTH_DIGITS = /[０-９．]/g;
+const CN_NUM = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+
+function normalizeDigits(text) {
+  return text.replace(FULLWIDTH_DIGITS, (c) => (c === '．' ? '.' : String.fromCharCode(c.charCodeAt(0) - 0xfee0)));
+}
+
+function chineseNumerals(text) {
+  const out = [];
+  const re = /[零一二两三四五六七八九十百]+(?:点[零一二两三四五六七八九]+)?/g;
+  for (const m of text.matchAll(re)) {
+    const t = m[0];
+    const [intPart, decPart] = t.split('点');
+    let n = 0; let section = 0; let seen = false;
+    for (const ch of intPart) {
+      if (ch === '百') { section = (section || 1) * 100; seen = true; }
+      else if (ch === '十') { section += (section % 100 ? 0 : 0) || 0; section += 10 * ((section % 10) || 1) / ((section % 10) || 1); seen = true; }
+      else if (ch in CN_NUM) { section = section + CN_NUM[ch]; seen = true; }
+    }
+    n = section;
+    if (!seen) continue;
+    let val = n;
+    if (decPart) {
+      let frac = 0; let scale = 0.1;
+      for (const ch of decPart) { if (ch in CN_NUM) { frac += CN_NUM[ch] * scale; scale /= 10; } }
+      val += frac;
+    }
+    out.push(val);
+  }
+  return out;
+}
+
+function numbersIn(text) {
+  const norm = normalizeDigits(text);
+  const nums = [...norm.matchAll(/\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
+  return [...nums, ...chineseNumerals(norm)];
+}
+
+const KW = '孤对|电子域|配体|成键电子对';
+const NUM = '[0-9０-９零一二两三四五六七八九十]';
+const DOMAIN_COUNT_PATTERN = new RegExp(
+  `(?:(?:${KW})\\s*(?:的)?(?:数|总数|数目)?\\s*(?:是|为|=|有|共)\\s*${NUM})`
+  + `|(?:${NUM}\\s*(?:个|对|组)\\s*(?:${KW}))`);
 
 const HINT_LEVELS = 3;
 const MAX_SPEC_DEPTH = 12;
@@ -881,12 +937,28 @@ function checkShape(node, path, out, seen = new WeakSet(), depth = 0) {
   seen.delete(node);
 }
 
-function textLeaks(text, taskType, derived, entry) {
+function textLeaks(text, taskType, derived, entry, strict = true) {
   const leaks = hintLeaksAnswer(text, taskType, derived, entry);
-  const num = text.match(NUMERIC_ANSWER_PATTERN);
-  if (num) leaks.push(num[0]);
-  const dom = text.match(DOMAIN_COUNT_PATTERN);
-  if (dom) leaks.push(dom[0]);
+
+  const answerNumbers = new Set([
+    ...(entry.observedAngles ?? []).map((a) => a.deg),
+    ...derived.idealAngles,
+  ]);
+  let tol = 1;
+  try { tol = angleTolerance(entry.id); } catch { tol = 1; }
+  for (const n of numbersIn(text)) {
+    for (const a of answerNumbers) {
+      if (Math.abs(n - a) <= tol) leaks.push(`${n}（判分会把它判对，等于答案 ${a}）`);
+    }
+  }
+
+  if (strict && taskType === 'build_domains'
+      && DOMAIN_COUNT_PATTERN.test(normalizeDigits(text))) {
+    const counts = new Set([derived.lonePairs, derived.ligandCount, derived.stericNumber]);
+    if (numbersIn(text).some((n) => counts.has(n))) {
+      leaks.push('把电子域计数写在文案里');
+    }
+  }
   return leaks;
 }
 
@@ -902,7 +974,7 @@ function answerNeedles(taskType, derived, entry) {
       ];
     }
     case 'read_angle':
-      return (entry.observedAngles ?? []).flatMap((a) => [`${a.deg}°`, String(a.deg)]);
+      return [];
     case 'compression_direction':
       return derived.lonePairs > 0 ? ['小于理想', '压缩'] : ['等于理想'];
     case 'build_domains':
@@ -942,6 +1014,24 @@ function checkSpec(spec) {
   }
 
   checkKeys(spec, ALLOWED_SPEC_KEYS, '$', 'GATE-2', v);
+
+  if (typeof spec.title === 'string') {
+    const titleLeaks = new Set();
+    for (const task of spec.tasks) {
+      if (!task || typeof task !== 'object') continue;
+      const e = getEntry(task.moleculeId);
+      if (!e) continue;
+      let d;
+      try { d = deriveGeometry(e.formula); } catch { continue; }
+      for (const t of Object.keys(TASK_TYPES)) {
+        for (const leak of textLeaks(spec.title, t, d, e)) titleLeaks.add(leak);
+      }
+    }
+    if (titleLeaks.size > 0) {
+      v.push(new Violation('GATE-5', '$.title',
+        `标题泄露答案或携带数值：出现了 ${[...titleLeaks].map((x) => JSON.stringify(x)).join('、')}`));
+    }
+  }
 
   spec.tasks.forEach((task, i) => {
     const p = `$.tasks[${i}]`;
@@ -1002,7 +1092,7 @@ function checkSpec(spec) {
           v.push(new Violation('GATE-5', `${p}.hints[${hi}]`, 'hint 必须是非空字符串'));
           return;
         }
-        const leaks = textLeaks(h, task.type, derived, entry);
+        const leaks = textLeaks(h, task.type, derived, entry, hi < HINT_LEVELS - 1);
         if (leaks.length > 0) {
           v.push(new Violation('GATE-5', `${p}.hints[${hi}]`,
             `hint 泄露答案：出现了 ${leaks.map((s) => JSON.stringify(s)).join('、')}`));
@@ -1019,6 +1109,27 @@ function checkSpec(spec) {
           `题干泄露答案或携带数值：出现了 ${leaks.map((s) => JSON.stringify(s)).join('、')}`));
       }
     }
+  });
+
+  const usable = spec.tasks.filter((t) => t && typeof t === 'object' && TASK_TYPES[t.type] && getEntry(t.moleculeId));
+  usable.forEach((task, i) => {
+    const texts = [task.prompt, ...(Array.isArray(task.hints) ? task.hints : [])]
+      .filter((x) => typeof x === 'string');
+    usable.forEach((other, j) => {
+      if (j <= i) return;
+      if (other.moleculeId !== task.moleculeId) return;
+      const e = getEntry(other.moleculeId);
+      let d;
+      try { d = deriveGeometry(e.formula); } catch { return; }
+      for (const text of texts) {
+        const leaks = textLeaks(text, other.type, d, e);
+        if (leaks.length > 0) {
+          v.push(new Violation('GATE-5', `$.tasks[${i}]`,
+            `文案泄露了第 ${j + 1} 题（${e.display} / ${other.type}）的答案：` +
+            `${leaks.map((x) => JSON.stringify(x)).join('、')}`));
+        }
+      }
+    });
   });
 
   return { ok: v.length === 0, violations: v };
@@ -1173,6 +1284,7 @@ class MoleculeView {
     this.model = null;
     this.showLonePairs = true;
     this.showCentral = true;
+    this.showLigands = true;
     this.lonePairDistanceOverride = null;
     this._bindDrag();
   }
@@ -1237,7 +1349,7 @@ class MoleculeView {
     const items = [];
     const centerRot = [0, 0, 0];
 
-    ligands.forEach((dir, i) => {
+    (this.showLigands ? ligands : []).forEach((dir, i) => {
       const p = rotate(dir, this.yaw, this.pitch);
       items.push({ kind: 'bond', p, z: p[2] - 0.001 });
       items.push({ kind: 'atom', el: ligand, p, z: p[2], idx: i });
