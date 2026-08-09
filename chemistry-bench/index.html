@@ -1,0 +1,1665 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>价层电子对互斥 · 可操作的化学 bench</title>
+<meta name="description" content="学生在三维模型上增删配体与孤对，构型按价层电子对互斥规则实时重排。判分走规则引擎，不经过大模型。">
+<link rel="icon" href="data:,">
+<style>
+:root{
+  --bg:#f6f6f4; --panel:#fff; --ink:#16181c; --ink-2:#4a5058; --ink-3:#7c838c;
+  --line:#e2e3e0; --accent:#2563eb; --good:#15803d; --good-bg:#eaf6ee;
+  --warn:#b45309; --warn-bg:#fdf3e3; --bad:#b91c1c; --bad-bg:#fbeceb;
+  --field:#0f1420; --radius:10px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.65 ui-sans-serif,system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+header.top{border-bottom:1px solid var(--line);background:var(--panel)}
+header.top .wrap{padding-top:22px;padding-bottom:18px}
+h1{font-size:22px;margin:0 0 6px;font-weight:680;letter-spacing:-.01em}
+.tagline{color:var(--ink-2);font-size:14px;margin:0}
+.manifesto{margin:12px 0 0;color:var(--ink-3);font-size:13px}
+.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.badge{font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid;line-height:1.5}
+.badge.done{color:var(--good);background:var(--good-bg);border-color:#bfe0ca}
+.badge.todo{color:var(--warn);background:var(--warn-bg);border-color:#f0d9ac}
+main{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px;
+  padding:18px 0 8px}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.panel h2{font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 10px;font-weight:650}
+#scene{width:100%;aspect-ratio:4/3;display:block;border-radius:8px;
+  background:var(--field);cursor:grab;touch-action:none}
+#scene:active{cursor:grabbing}
+.scene-hint{color:var(--ink-3);font-size:12.5px;margin:8px 2px 0}
+.molecule-row{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+#molecule-name{font-size:26px;font-weight:680}
+#task-counter{color:var(--ink-3);font-size:13px}
+#task-prompt{margin:0 0 12px}
+.law,.anchor{border-left:3px solid var(--accent);background:#f8fafc;
+  padding:9px 12px;border-radius:0 8px 8px 0;margin-bottom:10px}
+.anchor{border-left-color:#94a3b8}
+.law .k,.anchor .k{display:block;font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+#build-readout{font-variant-numeric:tabular-nums;color:var(--ink-3);font-size:13px;margin:8px 2px 0}
+#controls{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+.stepper{display:flex;align-items:center;gap:10px}
+.stepper-label{flex:1}
+.stepper-value{min-width:34px;text-align:center;font-size:17px;
+  font-variant-numeric:tabular-nums;font-weight:650}
+.options{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);
+  border-radius:9px;padding:9px 14px;cursor:pointer}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:650}
+.btn.step{padding:5px 13px;font-size:17px;line-height:1}
+.row{display:flex;gap:8px;margin-top:12px}
+.hint{margin:6px 0;color:var(--ink-2);font-size:14px}
+#feedback{margin-top:12px}
+.ok{color:var(--good);font-weight:650}
+.bad{color:var(--bad);font-weight:650}
+.warn{color:var(--warn)}
+.mis{margin-top:8px;background:var(--bad-bg);border:1px solid #f0c9c6;
+  border-radius:8px;padding:9px 12px}
+.mis-evidence{color:var(--ink-3);font-size:12.5px}
+.violation{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+  color:var(--bad);margin:4px 0}
+.obj{border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:8px;background:#fcfcfb}
+.obj-head{display:flex;align-items:center;gap:8px}
+.obj-id{font-family:ui-monospace,monospace;font-size:11px;color:var(--ink-3);letter-spacing:.04em}
+.obj-mis{margin-left:auto;font-size:11.5px;color:var(--bad)}
+.obj-zh{font-size:14px;margin-top:2px}
+.obj-meta{font-size:12px;color:var(--ink-3);margin-top:3px}
+.obj-met{border-color:#bfe0ca;background:var(--good-bg)}
+.obj-met .obj-meta{color:var(--good)}
+.obj-recovered{border-color:#bcd9f0;background:#eef5fb}
+.obj-recovered .obj-meta{color:#1d4ed8}
+.obj-in_progress{border-color:#f0d9ac;background:var(--warn-bg)}
+.ev{display:flex;gap:9px;align-items:baseline;font-size:12px;padding:5px 8px;
+  border-radius:6px;background:#f7f7f5;margin-bottom:5px}
+.ev code{color:var(--ink-3);font-family:ui-monospace,monospace}
+.ev span{color:var(--ink-2);font-family:ui-monospace,monospace}
+.ev em{margin-left:auto;font-style:normal;color:var(--bad);font-size:11.5px}
+.ev-ok code{color:var(--good)}
+.ev-bad code{color:var(--bad)}
+.measure-tip{margin:0;color:var(--ink-3);font-size:13.5px}
+.measure-readout{font-variant-numeric:tabular-nums;font-size:16px;padding:8px 12px;
+  background:#f7f7f5;border-radius:8px}
+.howto{margin:18px 0 0;color:var(--ink-2);font-size:14px}
+.howto h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 8px;font-weight:650}
+.howto ul{margin:0;padding-left:20px}
+.howto li{margin:5px 0}
+footer.bottom{border-top:1px solid var(--line);margin-top:26px;background:var(--panel)}
+footer.bottom .wrap{padding-top:18px;padding-bottom:26px}
+footer.bottom .byline{font-size:15px;color:var(--ink)}
+footer.bottom .byline b{font-weight:650}
+footer.bottom .pubdate{margin-top:3px;font-size:13px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <h1 id="bench-title">价层电子对互斥：电子对几何与分子几何</h1>
+    <p class="tagline">学生在三维模型上增删配体与孤对，构型按价层电子对互斥规则实时重排。判分走规则引擎，不经过大模型。</p>
+    <p class="manifesto">Manipulate a real figure · Graded as you go · Authored by AI, over fixed rules</p>
+    <div class="badges">
+      <span class="badge done">判分由规则引擎完成，不经过大模型</span>
+      <span class="badge todo">键角读数题只对「由对称性决定角度」的分子开放：实验测定的键角未经教研签核，系统会拒绝出题</span>
+      <span class="badge todo">误解陷阱的效度未经验证，目前只做到人工过目</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<main>
+  <section>
+    <div class="panel">
+      <h2>模型</h2>
+      <canvas id="scene"></canvas>
+      <p class="scene-hint">拖动可旋转。蓝色云团是孤对电子，它占电子域但不是原子。</p>
+      <div id="build-readout"></div>
+      <div id="controls"></div>
+      <div class="row">
+        <button class="btn" id="btn-hint">提示</button>
+        <button class="btn" id="btn-next" disabled>下一题</button>
+      </div>
+      <div id="hint-box"></div>
+      <div id="feedback"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="panel">
+      <h2>本题</h2>
+      <div class="molecule-row">
+        <span id="molecule-name">—</span>
+        <span id="task-counter"></span>
+      </div>
+      <p id="task-prompt"></p>
+      <div class="law"><span class="k">Governing law</span><span id="law-text"></span></div>
+      <div class="anchor"><span class="k">Anchor your approach</span><span id="anchor-text"></span></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Assessment · Live</h2>
+      <div id="objectives"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Evidence trace · xAPI</h2>
+      <div id="evidence"></div>
+    </div>
+  </section>
+</main>
+
+<div class="howto">
+  <h2>这一页在演示什么</h2>
+  <ul>
+    <li><b>操作真实对象，不是做选择题。</b>搭建题里学生自己决定放几个配体、几个孤对，构型按规则实时重排；读键角那一题是在模型上点两个原子量出来的。</li>
+    <li><b>每一次操作当场判分。</b>右侧逐目标进度实时更新，每个动作产出一条 xAPI 证据。答错时系统会指出这是哪一种误解，而不是只说「不对」。</li>
+    <li><b>判分不经过大模型。</b>分子几何、键角、干扰项、误解识别全部由价层电子对互斥的规则推出。最强的那个干扰项就是该分子的电子对几何名——它本来就在规则表里，不需要生成。</li>
+    <li><b>教学层的文案要过闸才能上。</b>题干与提示不允许携带答案或数值，不允许把答案写进提示，学习目标不允许与题型不符。任一条不过，整份内容拒收。</li>
+  </ul>
+</div>
+</div>
+
+<footer class="bottom">
+  <div class="wrap">
+    <div class="byline">作者：<b>辛海洋</b></div>
+    <div class="pubdate"><time datetime="2026-08-09">2026-08-09</time></div>
+  </div>
+</footer>
+
+<script type="module">
+window.__EMBEDDED_SPEC = {
+  "benchId": "vsepr-01",
+  "title": "价层电子对互斥：电子对几何与分子几何",
+  "_note": "这份规格是教学层，形状对应模型该产出的东西。它只指定考哪个分子、考什么、怎么说话。所有答案、干扰项、理想角由 engine/ 推出。规格里出现任何数值答案字段会被 GATE-2 拒收。",
+  "tasks": [
+    {
+      "type": "build_domains",
+      "moleculeId": "NH3",
+      "prompt": "在模型上把氨分子的中心原子周围搭完整：先放氢原子，再把中心氮原子上没有参与成键的电子放上去。",
+      "hints": [
+        "先数中心氮原子的价电子，它在第 15 族。",
+        "三根 N—H 键各用掉一部分价电子，剩下的电子留在中心原子上，且必须成对。",
+        "把剩余电子两两配对，配成几对就在模型上放几个孤对。"
+      ]
+    },
+    {
+      "type": "name_geometry",
+      "moleculeId": "NH3",
+      "prompt": "氨分子的分子几何是什么形状？",
+      "hints": [
+        "电子对几何数的是全部电子域，分子几何只看原子的位置。",
+        "孤对占着一个方向，但它不是原子，描述分子形状时它不出现。",
+        "把那一个孤对从四个电子域里去掉，看剩下三个氢原子相对氮原子的排布。"
+      ]
+    },
+    {
+      "type": "compression_direction",
+      "moleculeId": "NH3",
+      "prompt": "与理想的四面体键角相比，氨分子实际的 H—N—H 键角偏向哪一侧？",
+      "hints": [
+        "孤对只受一个原子核吸引，成键电子对受两个，孤对的电子云因此更胖。",
+        "更胖的电子云会把旁边的成键电子对推开一些。",
+        "把氨分子的键角和没有孤对的甲烷放在一起比。"
+      ]
+    },
+    {
+      "type": "build_domains",
+      "moleculeId": "XeF4",
+      "prompt": "四氟化氙的中心原子超过了八隅体。把氟原子和中心氙原子上剩余的电子对都搭上去。",
+      "hints": [
+        "氙是稀有气体，价层有八个电子，且允许超过八隅体。",
+        "四根 Xe—F 键之后，中心原子还剩一些电子没有用掉。",
+        "把剩余电子两两配对放上去，再数总的电子域数。"
+      ]
+    },
+    {
+      "type": "name_geometry",
+      "moleculeId": "XeF4",
+      "prompt": "四氟化氙的分子几何是什么形状？",
+      "hints": [
+        "六个电子域对应的电子对几何是正八面体。",
+        "两个孤对会尽量离得最远，占据相对的两个顶点。",
+        "把上下两个顶点上的孤对拿掉，剩下四个氟原子落在同一个平面内。"
+      ]
+    },
+    {
+      "type": "read_angle",
+      "moleculeId": "CH4",
+      "prompt": "在模型上读出甲烷的 H—C—H 键角。",
+      "hints": [
+        "甲烷的中心碳原子没有孤对，四个电子域彼此等价。",
+        "四个方向在空间里彼此距离最大时构成正四面体。",
+        "正四面体中心到任意两个顶点的夹角是一个固定值，可以在模型上直接量。"
+      ]
+    }
+  ]
+};
+
+const VALENCE = {
+  H: 1, He: 2,
+  Li: 1, Be: 2, B: 3, C: 4, N: 5, O: 6, F: 7, Ne: 8,
+  Na: 1, Mg: 2, Al: 3, Si: 4, P: 5, S: 6, Cl: 7, Ar: 8,
+  K: 1, Ca: 2, Ga: 3, Ge: 4, As: 5, Se: 6, Br: 7, Kr: 8,
+  Rb: 1, Sr: 2, In: 3, Sn: 4, Sb: 5, Te: 6, I: 7, Xe: 8,
+};
+
+const ELECTRON_PAIR_GEOMETRY = {
+  2: { key: 'linear', zh: '直线形', idealAngles: [180] },
+  3: { key: 'trigonal_planar', zh: '平面三角形', idealAngles: [120] },
+  4: { key: 'tetrahedral', zh: '四面体形', idealAngles: [109.5] },
+  5: { key: 'trigonal_bipyramidal', zh: '三角双锥形', idealAngles: [90, 120] },
+  6: { key: 'octahedral', zh: '正八面体形', idealAngles: [90] },
+};
+
+const MOLECULAR_GEOMETRY = {
+  '2_0': { key: 'linear', zh: '直线形', notation: 'AX2' },
+  '3_0': { key: 'trigonal_planar', zh: '平面三角形', notation: 'AX3' },
+  '2_1': { key: 'bent', zh: '角形', notation: 'AX2E' },
+  '4_0': { key: 'tetrahedral', zh: '四面体形', notation: 'AX4' },
+  '3_1': { key: 'trigonal_pyramidal', zh: '三角锥形', notation: 'AX3E' },
+  '2_2': { key: 'bent', zh: '角形', notation: 'AX2E2' },
+  '5_0': { key: 'trigonal_bipyramidal', zh: '三角双锥形', notation: 'AX5' },
+  '4_1': { key: 'seesaw', zh: '变形四面体形', notation: 'AX4E' },
+  '3_2': { key: 't_shaped', zh: 'T 形', notation: 'AX3E2' },
+  '2_3': { key: 'linear', zh: '直线形', notation: 'AX2E3' },
+  '6_0': { key: 'octahedral', zh: '正八面体形', notation: 'AX6' },
+  '5_1': { key: 'square_pyramidal', zh: '四方锥形', notation: 'AX5E' },
+  '4_2': { key: 'square_planar', zh: '平面四方形', notation: 'AX4E2' },
+};
+
+class VseprError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+function countDomains(formula) {
+  const { central, ligand, n, charge = 0 } = formula;
+
+  if (!Object.prototype.hasOwnProperty.call(VALENCE, central)) {
+    throw new VseprError('UNSUPPORTED_CENTRAL',
+      `中心原子 ${central} 不在主族价电子表内，VSEPR 不适用`);
+  }
+  if (!Object.prototype.hasOwnProperty.call(VALENCE, ligand)) {
+    throw new VseprError('UNSUPPORTED_LIGAND',
+      `配体原子 ${ligand} 不在主族价电子表内`);
+  }
+  if (!Number.isInteger(n) || n < 2 || n > 6) {
+    throw new VseprError('LIGAND_COUNT_RANGE',
+      `配体数须为 2–6 的整数，收到 ${n}`);
+  }
+  if (!Number.isInteger(charge) || Math.abs(charge) > 3) {
+    throw new VseprError('CHARGE_RANGE', `电荷须为 -3–3 的整数，收到 ${charge}`);
+  }
+
+  const totalValence = VALENCE[central] + n * VALENCE[ligand] - charge;
+
+  if (totalValence % 2 !== 0) {
+    throw new VseprError('ODD_ELECTRON',
+      `总价电子数 ${totalValence} 为奇数（自由基），本引擎不处理`);
+  }
+  if (totalValence < 2 * n) {
+    throw new VseprError('INSUFFICIENT_ELECTRONS',
+      `总价电子数 ${totalValence} 不足以形成 ${n} 根单键`);
+  }
+
+  const bondingElectrons = 2 * n;
+  const afterBonds = totalValence - bondingElectrons;
+
+  const perTerminalNeed = ligand === 'H' ? 0 : 6;
+  const terminalNeed = n * perTerminalNeed;
+  const leftover = afterBonds - terminalNeed;
+
+  let lonePairs;
+  let extraBonds = 0;
+  if (leftover >= 0) {
+    if (leftover % 2 !== 0) {
+      throw new VseprError('UNPAIRED_REMAINDER',
+        `中心原子剩余 ${leftover} 个电子无法成对`);
+    }
+    lonePairs = leftover / 2;
+  } else {
+    extraBonds = Math.ceil(-leftover / 2);
+    lonePairs = 0;
+  }
+
+  const stericNumber = n + lonePairs;
+  if (!ELECTRON_PAIR_GEOMETRY[stericNumber]) {
+    throw new VseprError('STERIC_NUMBER_RANGE',
+      `价层电子对数 ${stericNumber} 超出本引擎覆盖的 2–6`);
+  }
+
+  return {
+    ligandCount: n,
+    lonePairs,
+    stericNumber,
+    trace: {
+      totalValence,
+      bondingElectrons,
+      afterBonds,
+      terminalNeed,
+      leftover,
+      extraBonds,
+    },
+  };
+}
+
+function deriveGeometry(formula) {
+  const domains = countDomains(formula);
+  const { ligandCount, lonePairs, stericNumber } = domains;
+
+  const epg = ELECTRON_PAIR_GEOMETRY[stericNumber];
+  const mgKey = `${ligandCount}_${lonePairs}`;
+  const mg = MOLECULAR_GEOMETRY[mgKey];
+
+  if (!mg) {
+    throw new VseprError('GEOMETRY_NOT_TABULATED',
+      `组合 AX${ligandCount}E${lonePairs} 不在分子几何表内`);
+  }
+
+  return {
+    formula,
+    ...domains,
+    electronPairGeometry: epg,
+    molecularGeometry: mg,
+    idealAngles: epg.idealAngles,
+    epgDiffersFromMg: lonePairs > 0 && epg.key !== mg.key,
+    angleCompression: lonePairs > 0 ? 'compressed_below_ideal' : 'none',
+  };
+}
+
+function geometrySignature(derived) {
+  return `${derived.ligandCount}_${derived.lonePairs}`;
+}
+
+
+const S3 = 1 / Math.sqrt(3);
+const COS30 = Math.sqrt(3) / 2;
+
+const DOMAIN_POSITIONS = {
+  2: [[0, 0, 1], [0, 0, -1]],
+  3: [[1, 0, 0], [-0.5, COS30, 0], [-0.5, -COS30, 0]],
+  4: [[S3, S3, S3], [S3, -S3, -S3], [-S3, S3, -S3], [-S3, -S3, S3]],
+  5: [
+    [1, 0, 0], [-0.5, COS30, 0], [-0.5, -COS30, 0], // 赤道位
+    [0, 0, 1], [0, 0, -1],                           // 轴向位
+  ],
+  6: [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]],
+};
+
+const LONE_PAIR_PRIORITY = {
+  2: [0, 1],
+  3: [0, 1, 2],
+  4: [0, 1, 2, 3],
+  5: [0, 1, 2, 3, 4],
+  6: [4, 5, 0, 1, 2, 3],
+};
+
+function layout(ligandCount, lonePairCount) {
+  const sn = ligandCount + lonePairCount;
+  const positions = DOMAIN_POSITIONS[sn];
+  if (!positions) {
+    throw new Error(`价层电子对数 ${sn} 没有对应的理想构型（覆盖 2–6）`);
+  }
+  const priority = LONE_PAIR_PRIORITY[sn];
+  const lpIdx = new Set(priority.slice(0, lonePairCount));
+
+  const lonePairs = [];
+  const ligands = [];
+  positions.forEach((p, i) => {
+    if (lpIdx.has(i)) lonePairs.push(p);
+    else ligands.push(p);
+  });
+  return { ligands, lonePairs, stericNumber: sn };
+}
+
+function angleBetween(a, b) {
+  const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const na = Math.hypot(...a);
+  const nb = Math.hypot(...b);
+  const cos = Math.min(1, Math.max(-1, dot / (na * nb)));
+  return (Math.acos(cos) * 180) / Math.PI;
+}
+
+function ligandAngles(ligands) {
+  const out = [];
+  for (let i = 0; i < ligands.length; i += 1) {
+    for (let j = i + 1; j < ligands.length; j += 1) {
+      out.push(angleBetween(ligands[i], ligands[j]));
+    }
+  }
+  const uniq = [];
+  for (const a of out.sort((x, y) => x - y)) {
+    if (!uniq.some((u) => Math.abs(u - a) < 0.5)) uniq.push(a);
+  }
+  return uniq.map((a) => Math.round(a * 10) / 10);
+}
+
+
+
+const CATALOG = [
+  {
+    id: 'CH4',
+    display: 'CH₄',
+    formula: { central: 'C', ligand: 'H', n: 4, charge: 0 },
+    observedAngles: [{ pair: 'H-C-H', deg: 109.5, source: 'symmetry' }],
+    teachingTags: ['baseline_no_lone_pair'],
+    reviewedBy: null,
+  },
+  {
+    id: 'NH3',
+    display: 'NH₃',
+    formula: { central: 'N', ligand: 'H', n: 3, charge: 0 },
+    observedAngles: [{ pair: 'H-N-H', deg: 106.7, source: 'experimental' }],
+    teachingTags: ['epg_vs_mg', 'lone_pair_compression'],
+    reviewedBy: null,
+  },
+  {
+    id: 'H2O',
+    display: 'H₂O',
+    formula: { central: 'O', ligand: 'H', n: 2, charge: 0 },
+    observedAngles: [{ pair: 'H-O-H', deg: 104.5, source: 'experimental' }],
+    teachingTags: ['epg_vs_mg', 'lone_pair_compression'],
+    reviewedBy: null,
+  },
+  {
+    id: 'CO2',
+    display: 'CO₂',
+    formula: { central: 'C', ligand: 'O', n: 2, charge: 0 },
+    observedAngles: [{ pair: 'O-C-O', deg: 180, source: 'symmetry' }],
+    teachingTags: ['multiple_bond_one_domain'],
+    reviewedBy: null,
+  },
+  {
+    id: 'BF3',
+    display: 'BF₃',
+    formula: { central: 'B', ligand: 'F', n: 3, charge: 0 },
+    observedAngles: [{ pair: 'F-B-F', deg: 120, source: 'symmetry' }],
+    teachingTags: ['electron_deficient', 'baseline_no_lone_pair'],
+    reviewedBy: null,
+  },
+  {
+    id: 'SO2',
+    display: 'SO₂',
+    formula: { central: 'S', ligand: 'O', n: 2, charge: 0 },
+    observedAngles: [{ pair: 'O-S-O', deg: 119, source: 'experimental' }],
+    teachingTags: ['epg_vs_mg', 'lone_pair_compression'],
+    reviewedBy: null,
+  },
+  {
+    id: 'XeF4',
+    display: 'XeF₄',
+    formula: { central: 'Xe', ligand: 'F', n: 4, charge: 0 },
+    observedAngles: [{ pair: 'F-Xe-F', deg: 90, source: 'symmetry' }],
+    teachingTags: ['epg_vs_mg', 'expanded_octet', 'lone_pair_placement'],
+    reviewedBy: null,
+  },
+  {
+    id: 'XeF2',
+    display: 'XeF₂',
+    formula: { central: 'Xe', ligand: 'F', n: 2, charge: 0 },
+    observedAngles: [{ pair: 'F-Xe-F', deg: 180, source: 'symmetry' }],
+    teachingTags: ['epg_vs_mg', 'expanded_octet', 'three_lone_pairs_still_linear'],
+    reviewedBy: null,
+  },
+  {
+    id: 'SF6',
+    display: 'SF₆',
+    formula: { central: 'S', ligand: 'F', n: 6, charge: 0 },
+    observedAngles: [{ pair: 'F-S-F', deg: 90, source: 'symmetry' }],
+    teachingTags: ['expanded_octet', 'baseline_no_lone_pair'],
+    reviewedBy: null,
+  },
+  {
+    id: 'PCl5',
+    display: 'PCl₅',
+    formula: { central: 'P', ligand: 'Cl', n: 5, charge: 0 },
+    observedAngles: [
+      { pair: 'Cl-P-Cl (赤道面内)', deg: 120, source: 'symmetry' },
+      { pair: 'Cl-P-Cl (轴向对赤道)', deg: 90, source: 'symmetry' },
+    ],
+    teachingTags: ['expanded_octet', 'two_angle_families'],
+    reviewedBy: null,
+  },
+  {
+    id: 'SF4',
+    display: 'SF₄',
+    formula: { central: 'S', ligand: 'F', n: 4, charge: 0 },
+    observedAngles: null,
+    teachingTags: ['epg_vs_mg', 'lone_pair_placement', 'expanded_octet'],
+    reviewedBy: null,
+  },
+  {
+    id: 'NH4+',
+    display: 'NH₄⁺',
+    formula: { central: 'N', ligand: 'H', n: 4, charge: 1 },
+    observedAngles: [{ pair: 'H-N-H', deg: 109.5, source: 'symmetry' }],
+    teachingTags: ['charged_species', 'baseline_no_lone_pair'],
+    reviewedBy: null,
+  },
+];
+
+const BY_ID = new Map(CATALOG.map((e) => [e.id, e]));
+
+function getEntry(id) {
+  return BY_ID.get(id) ?? null;
+}
+
+const PLACEHOLDER_SIGNATURES = [
+  'todo', 'tbd', 'test', 'x', 'xx', 'xxx', 'n/a', 'na', 'none', 'null', '-', '?',
+  '待补', '待定', '未定', '待签', '签核中', '教研', 'reviewer', 'admin',
+];
+
+function isValidSignature(sig) {
+  if (sig === null || typeof sig !== 'object' || Array.isArray(sig)) return false;
+  const { by, date, source } = sig;
+  if (typeof by !== 'string' || by.trim().length < 2) return false;
+  if (PLACEHOLDER_SIGNATURES.includes(by.trim().toLowerCase())) return false;
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  if (Number.isNaN(Date.parse(date))) return false;
+  if (typeof source !== 'string' || source.trim().length < 4) return false;
+  if (PLACEHOLDER_SIGNATURES.includes(source.trim().toLowerCase())) return false;
+  return true;
+}
+
+function isAngleTaskEligible(entry) {
+  if (!entry || !entry.observedAngles || entry.observedAngles.length === 0) return false;
+  const allSymmetry = entry.observedAngles.every((a) => a.source === 'symmetry');
+  if (allSymmetry) return true;
+  return isValidSignature(entry.reviewedBy);
+}
+
+
+
+
+
+
+const OBJECTIVES = [
+  {
+    id: 'OBJ-1',
+    zh: '由分子式定出价层电子对数与孤对数',
+    detail: '数对电子域，才有后面所有判断',
+  },
+  {
+    id: 'OBJ-2',
+    zh: '区分电子对几何与分子几何',
+    detail: '孤对占据电子域但不出现在分子形状里',
+  },
+  {
+    id: 'OBJ-3',
+    zh: '判断孤对对键角的压缩方向',
+    detail: '孤对斥力大于成键电子对，把键角压到理想值以下',
+  },
+];
+
+const MISCONCEPTIONS = {
+  EPG_AS_MG: {
+    id: 'EPG_AS_MG',
+    zh: '把电子对几何当成分子几何',
+    evidence: '学生给出的名称正好等于该分子的电子对几何名',
+  },
+  LONE_PAIR_IGNORED: {
+    id: 'LONE_PAIR_IGNORED',
+    zh: '漏数中心原子孤对',
+    evidence: '学生搭出的电子域数等于配体数，孤对被当成不存在',
+  },
+  LONE_PAIR_AS_LIGAND: {
+    id: 'LONE_PAIR_AS_LIGAND',
+    zh: '把孤对当成配体',
+    evidence: '学生的配体数等于正确的电子域总数',
+  },
+  IDEAL_ANGLE_ASSUMED: {
+    id: 'IDEAL_ANGLE_ASSUMED',
+    zh: '直接用理想键角，未考虑孤对压缩',
+    evidence: '存在孤对时学生给出的角度等于电子对几何的理想角',
+  },
+};
+
+const ANGLE_TOLERANCE_CAP_DEG = 2.5;
+const ANGLE_TOLERANCE_FLOOR_DEG = 0.2;
+
+function acceptableAngles(entryId) {
+  const { entry, derived } = truthFor(entryId);
+  const observed = entry.observedAngles ?? [];
+  if (observed.some((a) => a.source === 'experimental')) {
+    return observed.map((a) => a.deg);
+  }
+  return ligandAngles(layout(derived.ligandCount, derived.lonePairs).ligands);
+}
+
+function angleTolerance(entryId) {
+  const { derived } = truthFor(entryId);
+  const pts = [...acceptableAngles(entryId)];
+  if (derived.lonePairs > 0) {
+    for (const d of derived.idealAngles) {
+      if (!pts.some((x) => Math.abs(x - d) < 0.01)) pts.push(d);
+    }
+  }
+  pts.sort((a, b) => a - b);
+  let minSep = Infinity;
+  for (let i = 1; i < pts.length; i += 1) minSep = Math.min(minSep, pts[i] - pts[i - 1]);
+  if (!Number.isFinite(minSep)) return ANGLE_TOLERANCE_CAP_DEG;
+  return Math.min(ANGLE_TOLERANCE_CAP_DEG,
+    Math.max(ANGLE_TOLERANCE_FLOOR_DEG, minSep / 3));
+}
+
+function truthFor(entryId) {
+  const entry = getEntry(entryId);
+  if (!entry) throw new Error(`分子 ${entryId} 不在常数表内`);
+  return { entry, derived: deriveGeometry(entry.formula) };
+}
+
+function gradeDomainBuild(entryId, studentLigands, studentLonePairs) {
+  const { derived } = truthFor(entryId);
+  const correctX = derived.ligandCount;
+  const correctE = derived.lonePairs;
+  const passed = studentLigands === correctX && studentLonePairs === correctE;
+
+  let misconception = null;
+  if (!passed) {
+    if (studentLigands === correctX && studentLonePairs === 0 && correctE > 0) {
+      misconception = MISCONCEPTIONS.LONE_PAIR_IGNORED;
+    } else if (studentLigands === derived.stericNumber && correctE > 0) {
+      misconception = MISCONCEPTIONS.LONE_PAIR_AS_LIGAND;
+    }
+  }
+
+  return {
+    objectiveId: 'OBJ-1',
+    passed,
+    expected: { ligands: correctX, lonePairs: correctE, stericNumber: derived.stericNumber },
+    actual: { ligands: studentLigands, lonePairs: studentLonePairs },
+    misconception,
+  };
+}
+
+function gradeGeometryName(entryId, answerKey) {
+  const { derived } = truthFor(entryId);
+  const passed = answerKey === derived.molecularGeometry.key;
+
+  let misconception = null;
+  if (!passed && derived.epgDiffersFromMg
+      && answerKey === derived.electronPairGeometry.key) {
+    misconception = MISCONCEPTIONS.EPG_AS_MG;
+  }
+
+  return {
+    objectiveId: 'OBJ-2',
+    passed,
+    expected: derived.molecularGeometry.key,
+    actual: answerKey,
+    misconception,
+  };
+}
+
+function gradeAngle(entryId, answerDeg) {
+  const { entry, derived } = truthFor(entryId);
+  if (!isAngleTaskEligible(entry)) {
+    return {
+      objectiveId: 'OBJ-3',
+      passed: null,
+      skipped: true,
+      reason: 'ANGLE_NOT_REVIEWED',
+      detail: `${entry.display} 的实验键角未经教研签核，本关不判读数`,
+    };
+  }
+
+  if (typeof answerDeg !== 'number' || !Number.isFinite(answerDeg)) {
+    return {
+      objectiveId: 'OBJ-3',
+      passed: false,
+      expected: { anyOf: acceptableAngles(entryId) },
+      actual: answerDeg,
+      misconception: null,
+    };
+  }
+
+  const acceptable = acceptableAngles(entryId);
+  const tolerance = angleTolerance(entryId);
+  const passed = acceptable.some((deg) => Math.abs(answerDeg - deg) <= tolerance);
+
+  let misconception = null;
+  if (!passed && derived.lonePairs > 0 && derived.idealAngles.length === 1) {
+    const ideal = derived.idealAngles[0];
+    const hitsIdeal = Math.abs(answerDeg - ideal) <= tolerance;
+    const idealIsAcceptable = acceptable.some((a) => Math.abs(a - ideal) < 0.01);
+    const compressed = acceptable.some((a) => a < ideal - 0.01);
+    if (hitsIdeal && !idealIsAcceptable && compressed) {
+      misconception = MISCONCEPTIONS.IDEAL_ANGLE_ASSUMED;
+    }
+  }
+
+  return {
+    objectiveId: 'OBJ-3',
+    passed,
+    expected: { anyOf: acceptable, tolerance },
+    actual: answerDeg,
+    misconception,
+  };
+}
+
+function gradeCompressionDirection(entryId, answer) {
+  const { derived } = truthFor(entryId);
+  const expected = derived.lonePairs > 0 ? 'below_ideal' : 'equal_ideal';
+  return {
+    objectiveId: 'OBJ-3',
+    passed: answer === expected,
+    expected,
+    actual: answer,
+    misconception: null,
+  };
+}
+
+function summarize(results) {
+  return OBJECTIVES.map((obj) => {
+    const hits = results.filter((r) => r.objectiveId === obj.id && !r.skipped);
+    const attempted = hits.length;
+    const passed = hits.filter((r) => r.passed === true).length;
+    const latestPassed = hits.length > 0 && hits[hits.length - 1].passed === true;
+    let state = 'not_started';
+    if (attempted > 0) {
+      if (passed === attempted) state = 'met';
+      else if (latestPassed) state = 'recovered';
+      else state = 'in_progress';
+    }
+    return {
+      ...obj,
+      attempted,
+      passed,
+      state,
+      misconceptions: [...new Set(hits.filter((r) => r.misconception)
+        .map((r) => r.misconception.id))],
+    };
+  });
+}
+
+function toXapiStatement(actor, entryId, result) {
+  if (result.skipped) {
+    return {
+      actor: { name: actor, objectType: 'Agent' },
+      verb: { id: 'http://adlnet.gov/expapi/verbs/waived', display: { 'zh-CN': 'waived' } },
+      object: {
+        id: `https://cocorobo.cn/bench/vsepr/${entryId}#${result.objectiveId}`,
+        definition: { type: 'http://adlnet.gov/expapi/activities/cmi.interaction' },
+      },
+      result: {
+        extensions: { 'https://cocorobo.cn/xapi/ext/waived-reason': result.reason ?? null },
+      },
+      timestamp: new Date().toISOString(),
+    };
+  }
+  const verb = result.passed === true ? 'answered' : 'attempted';
+  return {
+    actor: { name: actor, objectType: 'Agent' },
+    verb: { id: `http://adlnet.gov/expapi/verbs/${verb}`, display: { 'zh-CN': verb } },
+    object: {
+      id: `https://cocorobo.cn/bench/vsepr/${entryId}#${result.objectiveId}`,
+      definition: { type: 'http://adlnet.gov/expapi/activities/cmi.interaction' },
+    },
+    result: {
+      success: result.passed === true,
+      response: JSON.stringify(result.actual),
+      extensions: {
+        'https://cocorobo.cn/xapi/ext/misconception': result.misconception?.id ?? null,
+        'https://cocorobo.cn/xapi/ext/expected': JSON.stringify(result.expected ?? null),
+      },
+    },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+
+
+
+
+
+const TASK_TYPES = {
+  build_domains: { grader: 'gradeDomainBuild', objective: 'OBJ-1' },
+  name_geometry: { grader: 'gradeGeometryName', objective: 'OBJ-2' },
+  read_angle: { grader: 'gradeAngle', objective: 'OBJ-3' },
+  compression_direction: { grader: 'gradeCompressionDirection', objective: 'OBJ-3' },
+};
+
+const ALLOWED_TASK_KEYS = ['type', 'moleculeId', 'objectiveId', 'prompt', 'hints'];
+const ALLOWED_SPEC_KEYS = ['benchId', 'title', 'tasks', '_note'];
+
+const NUMERIC_ANSWER_PATTERN = /(\d+(\.\d+)?)\s*(°|度)/;
+const DOMAIN_COUNT_PATTERN = /(孤对|电子域|配体|成键电子对)\s*(数\s*)?(是|为|=|有)?\s*[0-9零一二三四五六七八九十]/;
+
+const HINT_LEVELS = 3;
+const MAX_SPEC_DEPTH = 12;
+
+class Violation {
+  constructor(gate, path, message) {
+    this.gate = gate;
+    this.path = path;
+    this.message = message;
+  }
+  toString() {
+    return `[${this.gate}] ${this.path}: ${this.message}`;
+  }
+}
+
+function checkKeys(node, allowed, path, gate, out) {
+  if (node === null || typeof node !== 'object' || Array.isArray(node)) return;
+  for (const key of Object.keys(node)) {
+    if (!allowed.includes(key)) {
+      out.push(new Violation(gate, `${path}.${key}`,
+        `规格不允许出现字段 ${JSON.stringify(key)}；` +
+        `只允许 ${allowed.join(' / ')}。答案与数值必须由确定层推出`));
+    }
+  }
+}
+
+function checkShape(node, path, out, seen = new WeakSet(), depth = 0) {
+  if (node === null || typeof node !== 'object') return;
+  if (seen.has(node)) {
+    out.push(new Violation('GATE-0', path, '规格存在循环引用'));
+    return;
+  }
+  if (depth > MAX_SPEC_DEPTH) {
+    out.push(new Violation('GATE-0', path, `规格嵌套超过 ${MAX_SPEC_DEPTH} 层`));
+    return;
+  }
+  seen.add(node);
+  const entries = Array.isArray(node)
+    ? node.map((v, i) => [`[${i}]`, v])
+    : Object.entries(node).map(([k, v]) => [`.${k}`, v]);
+  for (const [seg, value] of entries) checkShape(value, `${path}${seg}`, out, seen, depth + 1);
+  seen.delete(node);
+}
+
+function textLeaks(text, taskType, derived, entry) {
+  const leaks = hintLeaksAnswer(text, taskType, derived, entry);
+  const num = text.match(NUMERIC_ANSWER_PATTERN);
+  if (num) leaks.push(num[0]);
+  const dom = text.match(DOMAIN_COUNT_PATTERN);
+  if (dom) leaks.push(dom[0]);
+  return leaks;
+}
+
+function answerNeedles(taskType, derived, entry) {
+  switch (taskType) {
+    case 'name_geometry': {
+      const zh = derived.molecularGeometry.zh;
+      return [
+        zh,
+        zh.endsWith('形') ? zh.slice(0, -1) : zh,
+        derived.molecularGeometry.notation,
+        derived.molecularGeometry.key,
+      ];
+    }
+    case 'read_angle':
+      return (entry.observedAngles ?? []).flatMap((a) => [`${a.deg}°`, String(a.deg)]);
+    case 'compression_direction':
+      return derived.lonePairs > 0 ? ['小于理想', '压缩'] : ['等于理想'];
+    case 'build_domains':
+      return [
+        `${derived.lonePairs} 对孤对`, `孤对 ${derived.lonePairs}`,
+        `${derived.ligandCount} 个配体`, `配体 ${derived.ligandCount}`,
+        `${derived.stericNumber} 个电子域`, `电子域 ${derived.stericNumber}`,
+      ];
+    default:
+      return [];
+  }
+}
+
+function hintLeaksAnswer(hintText, taskType, derived, entry) {
+  return answerNeedles(taskType, derived, entry).filter((n) => n && hintText.includes(n));
+}
+
+function checkSpec(spec) {
+  const v = [];
+
+  if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
+    v.push(new Violation('GATE-0', '$', '规格必须是对象'));
+    return { ok: false, violations: v };
+  }
+
+  if (typeof spec.benchId !== 'string' || !spec.benchId) {
+    v.push(new Violation('GATE-0', '$.benchId', '缺少 benchId'));
+  }
+  if (!Array.isArray(spec.tasks) || spec.tasks.length === 0) {
+    v.push(new Violation('GATE-0', '$.tasks', 'tasks 必须是非空数组'));
+    return { ok: false, violations: v };
+  }
+
+  checkShape(spec, '$', v);
+  if (v.some((x) => x.gate === 'GATE-0' && /循环引用|嵌套超过/.test(x.message))) {
+    return { ok: false, violations: v };
+  }
+
+  checkKeys(spec, ALLOWED_SPEC_KEYS, '$', 'GATE-2', v);
+
+  spec.tasks.forEach((task, i) => {
+    const p = `$.tasks[${i}]`;
+
+    if (task === null || typeof task !== 'object' || Array.isArray(task)) {
+      v.push(new Violation('GATE-0', p, `任务必须是对象，收到 ${
+        Array.isArray(task) ? 'array' : String(task)}`));
+      return;
+    }
+
+    checkKeys(task, ALLOWED_TASK_KEYS, p, 'GATE-2', v);
+
+    if (!Object.prototype.hasOwnProperty.call(TASK_TYPES, task.type)) {
+      v.push(new Violation('GATE-1', `${p}.type`,
+        `未登记的任务类型 ${JSON.stringify(task.type)}；` +
+        `已登记：${Object.keys(TASK_TYPES).join(' / ')}`));
+      return; // 类型未知，后续检查无从谈起
+    }
+
+    const entry = getEntry(task.moleculeId);
+    if (!entry) {
+      v.push(new Violation('GATE-3', `${p}.moleculeId`,
+        `分子 ${JSON.stringify(task.moleculeId)} 不在常数表内`));
+      return;
+    }
+    let derived;
+    try {
+      derived = deriveGeometry(entry.formula);
+    } catch (err) {
+      v.push(new Violation('GATE-3', `${p}.moleculeId`,
+        `确定层无法推导 ${entry.display}：${err.message}`));
+      return;
+    }
+
+    if (task.type === 'read_angle' && !isAngleTaskEligible(entry)) {
+      v.push(new Violation('GATE-4', `${p}.type`,
+        `${entry.display} 的键角未经签核或缺值，不得出读数任务`));
+    }
+
+    const declared = task.objectiveId;
+    const bound = TASK_TYPES[task.type].objective;
+    if (declared !== undefined && declared !== bound) {
+      v.push(new Violation('GATE-5', `${p}.objectiveId`,
+        `声明的目标 ${declared} 与类型 ${task.type} 绑定的 ${bound} 不一致`));
+    }
+    if (declared !== undefined && !OBJECTIVES.some((o) => o.id === declared)) {
+      v.push(new Violation('GATE-5', `${p}.objectiveId`,
+        `目标 ${declared} 不在 OBJECTIVES 内`));
+    }
+
+    if (!Array.isArray(task.hints) || task.hints.length !== HINT_LEVELS) {
+      v.push(new Violation('GATE-5', `${p}.hints`,
+        `hint 必须恰好 ${HINT_LEVELS} 级，收到 ${
+          Array.isArray(task.hints) ? task.hints.length : typeof task.hints}`));
+    } else {
+      task.hints.forEach((h, hi) => {
+        if (typeof h !== 'string' || h.trim().length === 0) {
+          v.push(new Violation('GATE-5', `${p}.hints[${hi}]`, 'hint 必须是非空字符串'));
+          return;
+        }
+        const leaks = textLeaks(h, task.type, derived, entry);
+        if (leaks.length > 0) {
+          v.push(new Violation('GATE-5', `${p}.hints[${hi}]`,
+            `hint 泄露答案：出现了 ${leaks.map((s) => JSON.stringify(s)).join('、')}`));
+        }
+      });
+    }
+
+    if (typeof task.prompt !== 'string' || task.prompt.trim().length === 0) {
+      v.push(new Violation('GATE-0', `${p}.prompt`, '缺少任务文案'));
+    } else {
+      const leaks = textLeaks(task.prompt, task.type, derived, entry);
+      if (leaks.length > 0) {
+        v.push(new Violation('GATE-5', `${p}.prompt`,
+          `题干泄露答案或携带数值：出现了 ${leaks.map((s) => JSON.stringify(s)).join('、')}`));
+      }
+    }
+  });
+
+  return { ok: v.length === 0, violations: v };
+}
+
+function compileSpec(spec) {
+  const { ok, violations } = checkSpec(spec);
+  if (!ok) {
+    const err = new Error(`规格未过闸（${violations.length} 条）`);
+    err.violations = violations;
+    throw err;
+  }
+
+  return {
+    benchId: spec.benchId,
+    title: spec.title ?? spec.benchId,
+    tasks: spec.tasks.map((task) => {
+      const entry = getEntry(task.moleculeId);
+      const derived = deriveGeometry(entry.formula);
+      const base = {
+        type: task.type,
+        objectiveId: TASK_TYPES[task.type].objective,
+        moleculeId: entry.id,
+        display: entry.display,
+        prompt: task.prompt,
+        hints: task.hints,
+      };
+
+      if (task.type === 'name_geometry') {
+        return {
+          ...base,
+          options: seededShuffle(buildGeometryOptions(derived), `${entry.id}:name`),
+        };
+      }
+      if (task.type === 'compression_direction') {
+        return {
+          ...base,
+          options: seededShuffle([
+            { key: 'below_ideal', zh: '小于理想键角' },
+            { key: 'equal_ideal', zh: '等于理想键角' },
+            { key: 'above_ideal', zh: '大于理想键角' },
+          ], `${entry.id}:compression`),
+        };
+      }
+      if (task.type === 'read_angle') {
+        return { ...base, acceptableAngles: acceptableAngles(entry.id) };
+      }
+      return { ...base, maxDomains: 6 };
+    }),
+  };
+}
+
+function seededShuffle(items, seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    const j = ((h >>> 0) % (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function buildGeometryOptions(derived) {
+  const correct = derived.molecularGeometry;
+  const keys = new Set([correct.key]);
+  const options = [{ key: correct.key, zh: correct.zh }];
+
+  if (derived.epgDiffersFromMg && !keys.has(derived.electronPairGeometry.key)) {
+    keys.add(derived.electronPairGeometry.key);
+    options.push({ key: derived.electronPairGeometry.key, zh: derived.electronPairGeometry.zh });
+  }
+
+  for (let e = 0; e <= 3 && options.length < 4; e += 1) {
+    const cand = MOLECULAR_GEOMETRY[`${derived.ligandCount}_${e}`];
+    if (cand && !keys.has(cand.key)) {
+      keys.add(cand.key);
+      options.push({ key: cand.key, zh: cand.zh });
+    }
+  }
+  for (const cand of Object.values(MOLECULAR_GEOMETRY)) {
+    if (options.length >= 4) break;
+    if (!keys.has(cand.key)) {
+      keys.add(cand.key);
+      options.push({ key: cand.key, zh: cand.zh });
+    }
+  }
+  return options;
+}
+
+
+const BG = '#0f1420';
+
+const ELEMENT_COLOR = {
+  H: '#e8edf5', C: '#4a5568', N: '#5b8dee', O: '#e0574a',
+  F: '#7fd6a2', Cl: '#8fd14f', S: '#e3c34a', Xe: '#b07fd6',
+  P: '#e8944a', B: '#d6a77f', Be: '#c0c8d4', Se: '#d18f4f',
+  Br: '#b5603a', I: '#9b59b6', default: '#9aa5b8',
+};
+
+const ELEMENT_RADIUS = {
+  H: 0.30, F: 0.36, O: 0.38, N: 0.40, C: 0.42, Cl: 0.48,
+  S: 0.50, P: 0.50, B: 0.44, Be: 0.46, Xe: 0.56, default: 0.44,
+};
+
+const colorOf = (el) => ELEMENT_COLOR[el] ?? ELEMENT_COLOR.default;
+const radiusOf = (el) => ELEMENT_RADIUS[el] ?? ELEMENT_RADIUS.default;
+
+const centralSphereRadius = (el) => radiusOf(el) * 1.15;
+const lonePairDistance = (el) => centralSphereRadius(el) + 0.26;
+
+function rotate([x, y, z], yaw, pitch) {
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  const x1 = x * cy + z * sy;
+  const z1 = -x * sy + z * cy;
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const y2 = y * cp - z1 * sp;
+  const z2 = y * sp + z1 * cp;
+  return [x1, y2, z2];
+}
+
+function sphere(ctx, sx, sy, r, color, depthShade) {
+  const g = ctx.createRadialGradient(sx - r * 0.35, sy - r * 0.35, r * 0.1, sx, sy, r);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.28, color);
+  g.addColorStop(1, shade(color, 0.45 * depthShade));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function shade(hex, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n >> 16) & 255) * (1 - amount));
+  const g = Math.round(((n >> 8) & 255) * (1 - amount));
+  const b = Math.round((n & 255) * (1 - amount));
+  return `rgb(${r},${g},${b})`;
+}
+
+class MoleculeView {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.yaw = 0.6;
+    this.pitch = -0.35;
+    this.model = null;
+    this.showLonePairs = true;
+    this.showCentral = true;
+    this.lonePairDistanceOverride = null;
+    this._bindDrag();
+  }
+
+  _bindDrag() {
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+    const down = (e) => {
+      dragging = true;
+      const p = e.touches ? e.touches[0] : e;
+      lastX = p.clientX; lastY = p.clientY;
+    };
+    const move = (e) => {
+      if (!dragging) return;
+      const p = e.touches ? e.touches[0] : e;
+      this.yaw += (p.clientX - lastX) * 0.01;
+      this.pitch += (p.clientY - lastY) * 0.01;
+      this.pitch = Math.max(-1.4, Math.min(1.4, this.pitch));
+      lastX = p.clientX; lastY = p.clientY;
+      this.draw();
+      if (e.cancelable) e.preventDefault();
+    };
+    const up = () => { dragging = false; };
+    this.canvas.addEventListener('mousedown', down);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    this.canvas.addEventListener('touchstart', down, { passive: true });
+    this.canvas.addEventListener('touchmove', move, { passive: false });
+    this.canvas.addEventListener('touchend', up);
+  }
+
+  setModel(model) {
+    this.model = model;
+    this.draw();
+  }
+
+  resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    this.canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    this.canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.draw();
+  }
+
+  draw() {
+    const { ctx, canvas } = this;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
+
+    ctx.fillStyle = BG;
+    ctx.fillRect(0, 0, w, h);
+    if (!this.model) return;
+
+    const { central, ligand, ligands, lonePairs } = this.model;
+    const cx = w / 2;
+    const cy = h / 2;
+    const scale = Math.min(w, h) * 0.30;
+
+    const items = [];
+    const centerRot = [0, 0, 0];
+
+    ligands.forEach((dir, i) => {
+      const p = rotate(dir, this.yaw, this.pitch);
+      items.push({ kind: 'bond', p, z: p[2] - 0.001 });
+      items.push({ kind: 'atom', el: ligand, p, z: p[2], idx: i });
+    });
+    if (this.showLonePairs) {
+      const lpDist = this.lonePairDistanceOverride ?? (radiusOf(central) * 1.15 + 0.26);
+      for (const dir of lonePairs) {
+        const p = rotate(dir, this.yaw, this.pitch).map((c) => c * lpDist);
+        items.push({ kind: 'lone', p, z: p[2] });
+      }
+    }
+    if (this.showCentral) {
+      items.push({ kind: 'atom', el: central, p: centerRot, z: 0, isCentral: true });
+    }
+    items.sort((a, b) => a.z - b.z);
+
+    const project = (p) => [cx + p[0] * scale, cy - p[1] * scale];
+    const depthScale = (z) => 0.82 + 0.18 * ((z + 1) / 2);
+
+    for (const it of items) {
+      const [sx, sy] = project(it.p);
+      const ds = depthScale(it.z);
+
+      if (it.kind === 'bond') {
+        const grad = ctx.createLinearGradient(cx, cy, sx, sy);
+        grad.addColorStop(0, 'rgba(200,210,230,0.85)');
+        grad.addColorStop(1, 'rgba(200,210,230,0.45)');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = Math.max(2, scale * 0.055 * ds);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(sx, sy);
+        ctx.stroke();
+        continue;
+      }
+
+      if (it.kind === 'lone') {
+        const r = scale * 0.32 * ds;
+        const g = ctx.createRadialGradient(sx, sy, r * 0.1, sx, sy, r);
+        g.addColorStop(0, 'rgba(150,200,255,0.92)');
+        g.addColorStop(0.55, 'rgba(110,165,245,0.55)');
+        g.addColorStop(1, 'rgba(110,160,240,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+
+      const r = scale * radiusOf(it.el) * (it.isCentral ? 1.15 : 1) * ds;
+      if (it.idx !== undefined && this.selection?.has(it.idx)) {
+        ctx.strokeStyle = '#ffd166';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r + 4, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      sphere(ctx, sx, sy, r, colorOf(it.el), 1 - (it.z + 1) / 2);
+      ctx.fillStyle = it.el === 'H' ? '#1b2233' : '#ffffff';
+      ctx.font = `600 ${Math.max(10, r * 0.85)}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(it.el, sx, sy);
+    }
+  }
+
+  pickLigand(clientX, clientY) {
+    if (!this.model) return -1;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    const w = this.canvas.width / dpr;
+    const h = this.canvas.height / dpr;
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const cx = w / 2;
+    const cy = h / 2;
+    const scale = Math.min(w, h) * 0.30;
+
+    let best = -1;
+    let bestZ = -Infinity;
+    this.model.ligands.forEach((dir, i) => {
+      const p = rotate(dir, this.yaw, this.pitch);
+      const sx = cx + p[0] * scale;
+      const sy = cy - p[1] * scale;
+      const r = scale * radiusOf(this.model.ligand) * (0.82 + 0.18 * ((p[2] + 1) / 2));
+      if (Math.hypot(px - sx, py - sy) <= r && p[2] > bestZ) {
+        best = i;
+        bestZ = p[2];
+      }
+    });
+    return best;
+  }
+
+  setSelection(indices) {
+    this.selection = new Set(indices);
+    this.draw();
+  }
+
+  nonBackgroundRatio() {
+    const { ctx, canvas } = this;
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const bg = [0x0f, 0x14, 0x20];
+    let hit = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (Math.abs(data[i] - bg[0]) > 8
+        || Math.abs(data[i + 1] - bg[1]) > 8
+        || Math.abs(data[i + 2] - bg[2]) > 8) hit += 1;
+    }
+    return hit / (data.length / 4);
+  }
+}
+
+
+
+
+
+
+
+
+
+const $ = (id) => document.getElementById(id);
+
+const GOVERNING_LAW = {
+  build_domains: '价层电子对互斥：中心原子周围的电子域（成键电子对与孤对）互相排斥，会取彼此距离最远的排布。电子域总数由价电子数决定。',
+  name_geometry: '电子对几何数的是全部电子域；分子几何只描述原子的位置。孤对占据电子域，但不出现在分子形状里。',
+  compression_direction: '孤对只受一个原子核约束，电子云比成键电子对更铺开，斥力更大，会把相邻的键角压小。',
+  read_angle: '理想构型的键角由电子域数唯一决定，与具体元素无关。',
+};
+
+const ANCHOR = {
+  build_domains: '先数总价电子，再扣掉成键用掉的，最后看中心原子还剩几对。',
+  name_geometry: '先定电子对几何，再把孤对拿掉，剩下的原子构成什么形状。',
+  compression_direction: '拿一个没有孤对的同类分子做参照。',
+  read_angle: '在模型上点两个配体原子，直接读出夹角。',
+};
+
+const state = {
+  compiled: null,
+  index: 0,
+  results: [],
+  evidence: [],
+  hintLevel: 0,
+  build: { ligands: 0, lonePairs: 0 },
+  selection: [],
+  view: null,
+};
+
+function fatal(title, lines) {
+  $('bench-title').textContent = title;
+  const box = $('task-prompt');
+  box.textContent = '';
+  for (const line of lines) {
+    const d = document.createElement('div');
+    d.className = 'violation';
+    d.textContent = String(line);
+    box.appendChild(d);
+  }
+}
+
+async function boot() {
+  let spec = window.__EMBEDDED_SPEC ?? null;
+  if (!spec) {
+    const specUrl = new URL('', import.meta.url);
+    try {
+      const res = await fetch(specUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      spec = await res.json();
+    } catch (err) {
+      fatal('规格加载失败，本 bench 未启动', [`${specUrl}`, err.message]);
+      return;
+    }
+  }
+
+  try {
+    state.compiled = compileSpec(spec);
+  } catch (err) {
+    fatal('规格未过闸，本 bench 不予加载',
+      (err.violations ?? []).map(String).length ? err.violations.map(String) : [err.message]);
+    return;
+  }
+
+  $('bench-title').textContent = state.compiled.title;
+  state.view = new MoleculeView($('scene'));
+  window.addEventListener('resize', () => state.view.resize());
+  $('scene').addEventListener('click', onSceneClick);
+  $('btn-hint').addEventListener('click', onHint);
+  $('btn-next').addEventListener('click', onNext);
+
+  renderObjectives();
+  loadTask(0);
+  state.view.resize();
+
+  window.__bench = state;
+}
+
+function currentTask() {
+  return state.compiled.tasks[state.index];
+}
+
+function loadTask(i) {
+  state.index = i;
+  state.hintLevel = 0;
+  state.selection = [];
+  const task = currentTask();
+  const entry = getEntry(task.moleculeId);
+  const truth = deriveGeometry(entry.formula);
+
+  $('task-counter').textContent = `第 ${i + 1} / ${state.compiled.tasks.length} 题`;
+  $('molecule-name').textContent = entry.display;
+  $('task-prompt').textContent = task.prompt;
+  $('law-text').textContent = GOVERNING_LAW[task.type];
+  $('anchor-text').textContent = ANCHOR[task.type];
+  $('hint-box').innerHTML = '';
+  $('btn-hint').disabled = false;
+  $('btn-hint').textContent = `提示 (0/${task.hints.length})`;
+  $('feedback').innerHTML = '';
+  $('btn-next').disabled = true;
+
+  if (task.type === 'build_domains') {
+    state.build = { ligands: 0, lonePairs: 0 };
+  } else {
+    state.build = { ligands: truth.ligandCount, lonePairs: truth.lonePairs };
+  }
+  renderControls(task, entry);
+  redrawModel(entry);
+}
+
+function redrawModel(entry) {
+  const { ligands, lonePairs } = state.build;
+  const domains = ligands + lonePairs;
+  if (domains < 2 || domains > 6) {
+    state.view.setModel({ central: entry.formula.central, ligand: entry.formula.ligand,
+      ligands: [], lonePairs: [] });
+    $('build-readout').textContent = domains === 0
+      ? '还没开始搭 —— 用下面的加号放上配体原子和孤对电子'
+      : `电子域 ${domains} —— 超出 2–6，画不出构型`;
+    return;
+  }
+  const l = layout(ligands, lonePairs);
+  state.view.setModel({
+    central: entry.formula.central,
+    ligand: entry.formula.ligand,
+    ligands: l.ligands,
+    lonePairs: l.lonePairs,
+  });
+  state.view.setSelection(state.selection);
+  $('build-readout').textContent =
+    `配体 ${ligands} · 孤对 ${lonePairs} · 电子域 ${ligands + lonePairs}`;
+}
+
+function renderControls(task, entry) {
+  const box = $('controls');
+  box.innerHTML = '';
+
+  if (task.type === 'build_domains') {
+    box.appendChild(stepper('配体原子', () => state.build.ligands,
+      (v) => { state.build.ligands = v; redrawModel(entry); }));
+    box.appendChild(stepper('孤对电子', () => state.build.lonePairs,
+      (v) => { state.build.lonePairs = v; redrawModel(entry); }));
+    box.appendChild(button('提交这个构型', 'primary', () => {
+      submit(gradeDomainBuild(task.moleculeId, state.build.ligands, state.build.lonePairs));
+    }));
+    return;
+  }
+
+  if (task.type === 'name_geometry' || task.type === 'compression_direction') {
+    const grader = task.type === 'name_geometry' ? gradeGeometryName : gradeCompressionDirection;
+    const wrap = document.createElement('div');
+    wrap.className = 'options';
+    for (const opt of task.options) {
+      wrap.appendChild(button(opt.zh, 'option', () => submit(grader(task.moleculeId, opt.key))));
+    }
+    box.appendChild(wrap);
+    return;
+  }
+
+  if (task.type === 'read_angle') {
+    const tip = document.createElement('p');
+    tip.className = 'measure-tip';
+    tip.textContent = '在模型上点两个配体原子，读出它们与中心原子的夹角。';
+    box.appendChild(tip);
+    const readout = document.createElement('div');
+    readout.className = 'measure-readout';
+    readout.id = 'measure-readout';
+    readout.textContent = '尚未选择';
+    box.appendChild(readout);
+    box.appendChild(button('提交读数', 'primary', () => {
+      const deg = measuredAngle();
+      if (deg === null) {
+        $('feedback').innerHTML = '<div class="warn">先在模型上点两个配体原子。</div>';
+        return;
+      }
+      submit(gradeAngle(task.moleculeId, deg));
+    }));
+  }
+}
+
+function measuredAngle() {
+  if (state.selection.length !== 2) return null;
+  const entry = getEntry(currentTask().moleculeId);
+  const truth = deriveGeometry(entry.formula);
+  const l = layout(truth.ligandCount, truth.lonePairs);
+  const raw = angleBetween(l.ligands[state.selection[0]], l.ligands[state.selection[1]]);
+  return Math.round(raw * 10) / 10;
+}
+
+function onSceneClick(e) {
+  if (currentTask().type !== 'read_angle') return;
+  const idx = state.view.pickLigand(e.clientX, e.clientY);
+  if (idx < 0) return;
+  const sel = state.selection.filter((i) => i !== idx);
+  if (sel.length === state.selection.length) sel.push(idx);
+  state.selection = sel.slice(-2);
+  state.view.setSelection(state.selection);
+  const out = $('measure-readout');
+  if (out) {
+    const deg = measuredAngle();
+    out.textContent = deg === null
+      ? `已选 ${state.selection.length} 个原子，还需要 ${2 - state.selection.length} 个`
+      : `量得夹角 ${deg}°`;
+  }
+}
+
+function submit(result) {
+  state.results.push(result);
+  const st = toXapiStatement('demo-student', currentTask().moleculeId, result);
+  state.evidence.push(st);
+
+  const fb = $('feedback');
+  if (result.skipped) {
+    fb.innerHTML = `<div class="warn">本题不判分：${result.detail}</div>`;
+  } else if (result.passed) {
+    fb.innerHTML = '<div class="ok">判定通过。</div>';
+  } else {
+    const mis = result.misconception
+      ? `<div class="mis">识别到的误解：${result.misconception.zh}<br>` +
+        `<span class="mis-evidence">判据：${result.misconception.evidence}</span></div>`
+      : '';
+    fb.innerHTML = `<div class="bad">还不对。</div>${mis}`;
+  }
+  $('btn-next').disabled = false;
+  renderObjectives();
+  renderEvidence();
+}
+
+function onHint() {
+  const task = currentTask();
+  if (state.hintLevel >= task.hints.length) return;
+  const p = document.createElement('p');
+  p.className = 'hint';
+  p.textContent = `${state.hintLevel + 1}. ${task.hints[state.hintLevel]}`;
+  $('hint-box').appendChild(p);
+  state.hintLevel += 1;
+  $('btn-hint').textContent = `提示 (${state.hintLevel}/${task.hints.length})`;
+  if (state.hintLevel >= task.hints.length) $('btn-hint').disabled = true;
+}
+
+function onNext() {
+  if (state.index + 1 < state.compiled.tasks.length) loadTask(state.index + 1);
+  else {
+    $('task-prompt').textContent = '六道题走完了。左侧是逐目标达成情况，下方是完整的证据链。';
+    $('controls').innerHTML = '';
+    $('btn-next').disabled = true;
+  }
+}
+
+function renderObjectives() {
+  const box = $('objectives');
+  box.innerHTML = '';
+  for (const o of summarize(state.results)) {
+    const row = document.createElement('div');
+    row.className = `obj obj-${o.state}`;
+    const mis = o.misconceptions.length
+      ? `<span class="obj-mis">${o.misconceptions.length} 项误解</span>` : '';
+    row.innerHTML = `
+      <div class="obj-head"><span class="obj-id">${o.id}</span>${mis}</div>
+      <div class="obj-zh">${o.zh}</div>
+      <div class="obj-meta">${o.attempted === 0 ? '未开始' : `${o.passed} / ${o.attempted} 通过`}</div>`;
+    box.appendChild(row);
+  }
+}
+
+function renderEvidence() {
+  const box = $('evidence');
+  box.innerHTML = state.evidence.slice(-6).reverse().map((st) => {
+    const ok = st.result.success ? 'ev-ok' : 'ev-bad';
+    const m = st.result.extensions['https://cocorobo.cn/xapi/ext/misconception'];
+    return `<div class="ev ${ok}"><code>${st.object.id.split('/').pop()}</code>` +
+      `<span>${st.result.response}</span>${m ? `<em>${m}</em>` : ''}</div>`;
+  }).join('');
+}
+
+function stepper(label, get, set) {
+  const el = document.createElement('div');
+  el.className = 'stepper';
+  el.innerHTML = `<span class="stepper-label">${label}</span>`;
+  const dec = button('−', 'step', () => { if (get() > 0) { set(get() - 1); val.textContent = get(); } });
+  const val = document.createElement('span');
+  val.className = 'stepper-value';
+  val.textContent = get();
+  const inc = button('＋', 'step', () => { if (get() < 6) { set(get() + 1); val.textContent = get(); } });
+  el.append(dec, val, inc);
+  return el;
+}
+
+function button(text, cls, onClick) {
+  const b = document.createElement('button');
+  b.className = `btn ${cls}`;
+  b.textContent = text;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  $('objectives').innerHTML = OBJECTIVES
+    .map((o) => `<div class="obj obj-not_started"><div class="obj-head">` +
+      `<span class="obj-id">${o.id}</span></div><div class="obj-zh">${o.zh}</div>` +
+      `<div class="obj-meta">未开始</div></div>`).join('');
+  boot().catch((err) => fatal('启动失败', [err?.message ?? String(err)]));
+});
+
+</script>
+</body>
+</html>

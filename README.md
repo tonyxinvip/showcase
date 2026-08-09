@@ -10,6 +10,8 @@ CocoRobo 教育产品原型的**公开演示**。
 
 | 演示 | 说明 | 地址 |
 |---|---|---|
+| 价层电子对互斥 · 化学 bench | 学生在三维模型上增删配体与孤对，构型按 VSEPR 规则实时重排。判分走规则引擎，不经过大模型 | [`/chemistry-bench/`](https://tonyxinvip.github.io/showcase/chemistry-bench/) |
+| 抛体打靶 · 物理 bench | 三个滑块把球打进 42 米外的圈里。物理由方程固定，诊断由确定性规则跑出 | [`/stem-bench/`](https://tonyxinvip.github.io/showcase/stem-bench/) |
 | 数学动画内容库 | 输入教学主题 → 输出可在课堂播放的数学动画，由 [Manim](https://www.manim.community/) 离线预生成 | [`/math-animation/`](https://tonyxinvip.github.io/showcase/math-animation/) |
 | 物理实验台 | 老师搭力学实验并出题 → 学生先预测再作答 → 回执码交回老师。基于 [Matter.js](https://github.com/liabru/matter-js)，出题时显示引擎与解析解的偏差 | [`/physics-lab/`](https://tonyxinvip.github.io/showcase/physics-lab/) |
 
