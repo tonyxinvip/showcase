@@ -132,7 +132,7 @@ canvas{display:block;width:100%;height:auto;touch-action:manipulation}
 .qlist .qt{font-size:14.5px;font-weight:600;margin:0 0 3px}
 .tag{font-size:11.5px;padding:2px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);white-space:nowrap;align-self:flex-start;margin-top:2px}
 .tag.p{background:var(--warm-soft);color:var(--warm)}
-.del{background:transparent;border:0;color:var(--ink-3);cursor:pointer;font:inherit;font-size:12.5px;padding:2px 4px}
+.del{background:transparent;border:0;color:var(--ink-3);cursor:pointer;font:inherit;font-size:12.5px;padding:2px 4px;white-space:nowrap;flex:none}
 .del:hover{color:var(--bad)}
 
 /* 摩擦锁 */
@@ -160,6 +160,15 @@ canvas{display:block;width:100%;height:auto;touch-action:manipulation}
 
 .note{font-size:13px;color:var(--ink-2);background:var(--sunk);border-radius:10px;padding:11px 13px;line-height:1.65;margin-top:12px}
 .note b{color:var(--ink);font-weight:660}
+
+/* 「发给学生」这一屏：先用人话说清楚要发的是什么，再给链接和二维码，
+   base64 文本码收进折叠区当备用——老师看一串 base64 是看不出对错的。 */
+.recap{background:var(--accent-soft);border-radius:11px;padding:13px 15px;margin-top:16px;font-size:13.5px;line-height:1.7;color:var(--ink)}
+.recap .t{font-weight:660;font-size:14.5px;margin-bottom:2px}
+.recap .l{color:var(--ink-2)}
+.recap .l b{color:var(--ink);font-weight:600}
+.linkrow{display:flex;gap:8px}
+.linkrow input{flex:1;min-width:0;font-size:13px;color:var(--ink-2)}
 
 .empty{color:var(--ink-3);font-size:13.5px;text-align:center;padding:18px 0}
 
@@ -265,17 +274,33 @@ a{color:var(--accent)}
         </div>
 
         <div class="card">
-          <h2>3 · 生成实验码</h2>
+          <h2>3 · 发给学生</h2>
           <div class="btnrow">
-            <button class="act" id="gen">生成实验码</button>
-            <button class="act ghost" id="copyLink" disabled>复制链接</button>
-            <button class="act ghost" id="tryIt" disabled>以学生身份试做</button>
+            <button class="act" id="gen">生成</button>
+            <button class="act ghost" id="tryIt" disabled>先以学生身份试做一遍</button>
           </div>
-          <div class="field" style="margin-top:14px">
-            <label for="labCode">实验码（发给学生，或直接发链接）</label>
-            <textarea id="labCode" readonly placeholder="点上面「生成实验码」"></textarea>
+          <p class="hint" id="genHint" style="margin-top:10px">配好上面两步，点「生成」。</p>
+
+          <div id="outBox" style="display:none">
+            <div class="recap" id="recap"></div>
+
+            <div class="field" style="margin-top:16px">
+              <label for="labLink">发给学生的链接</label>
+              <div class="linkrow">
+                <input type="text" id="labLink" readonly>
+                <button class="act" id="copyLink">复制</button>
+              </div>
+            </div>
+
+            <p class="hint" style="margin:10px 0 0">把链接发到班级群即可。学生点开就是这份实验，不需要注册、不需要装东西。</p>
+
+            <details class="fallback">
+              <summary>学生打不开链接？改发这段文本码</summary>
+              <p class="hint" style="margin:6px 0 8px">让学生打开本页 →「学生作答」→ 把这段粘进去。</p>
+              <textarea id="labCode" readonly></textarea>
+              <button class="act ghost" id="copyCode" style="margin-top:8px">复制文本码</button>
+            </details>
           </div>
-          <p class="hint" id="genHint"></p>
         </div>
       </div>
 
@@ -659,8 +684,12 @@ var TEMPLATES = {
         {k:"v1", label:"左球速度", v:fmt(v1), u:"m/s"},
         {k:"v2", label:"右球速度", v:fmt(v2), u:"m/s"},
         {k:"p",  label:"总动量",   v:fmt(p.m1*v1 + p.m2*v2, 1), u:"kg·m/s"},
-        /* 动能损失率可以出题，就必须能读到 */
-        {k:"kl", label:"动能损失率", v:fmt(100*(1 - (0.5*p.m1*v1*v1 + 0.5*p.m2*v2*v2)/(0.5*p.m1*p.v1*p.v1)), 1), u:"%"},
+        /* 可出题的量，读数一律优先取 sim.meas —— 不能让屏幕和判分各算一遍。
+           「屏幕上给学生看的数和判分用的数是两条独立算式」这个病根，三轮里换着
+           症状出现了三次；这是最后一处还留着第二条算式的读数。 */
+        {k:"kl", label:"动能损失率",
+         v:fmt(num(sim.meas.keLoss) ? sim.meas.keLoss
+               : 100*(1 - (0.5*p.m1*v1*v1 + 0.5*p.m2*v2*v2)/(0.5*p.m1*p.v1*p.v1)), 1), u:"%"},
         {k:"t",  label:"时间",     v:fmt(tsec(sim)), u:"s"}
       ];
     },
@@ -990,9 +1019,10 @@ function buildParams(){
    学生做的是 45° 那份，判分也按 45° 来，全程零提示。 */
 function staleCode(){
   if(!$("labCode").value) return;
-  $("labCode").value = "";
-  $("copyLink").disabled = true; $("tryIt").disabled = true;
-  $("genHint").textContent = "参数或题目改过了，刚才那段实验码已作废——请重新点「生成实验码」。";
+  $("labCode").value = ""; $("labLink").value = "";
+  $("outBox").style.display = "none";
+  $("tryIt").disabled = true;
+  $("genHint").textContent = "参数或题目改过了，刚才生成的那份已作废——请重新点「生成」。";
 }
 /* 标题和出题人同样进实验码（currentLab 里就有），改了不作废是同一个失效 */
 ["labTitle","labBy"].forEach(function(id){ $(id).addEventListener("input", staleCode); });
@@ -1204,7 +1234,11 @@ function showScore(r){
       var q = T.quantities.filter(function(x){return x.k===p.key;})[0] || {label:p.key, unit:"", n:2};
       var mine = sState.preds[p.key], real = truth[p.key];
       var c = compare(mine, real, floorOf(q)), fill, txt;
-      if(c.state === "rel"){ fill = 100 - Math.min(100, Math.abs(c.d)); txt = (c.d>0?"高了 ":"低了 ")+fmt(Math.abs(c.d),0)+"%"; }
+      if(c.state === "rel"){
+        fill = 100 - Math.min(100, Math.abs(c.d));
+        var ad = Math.abs(c.d);
+        txt = ad < 0.5 ? "几乎正好" : (c.d>0?"高了 ":"低了 ")+fmt(ad,0)+"%";   /* 别印「低了 0%」 */
+      }
       else if(c.state === "zero"){ fill = 100; txt = "正好"; }
       else if(c.state === "absdiff"){ fill = 0; txt = "实测接近 0"; }
       else { fill = 0; txt = "这次实验没测出这个量"; }
@@ -1216,7 +1250,10 @@ function showScore(r){
   }
   /* total 是「可判分题数」，不等于题目总数。不把 skipped 一起带上，
      老师看到「3 / 3」会以为满分，看不出原本有几题没能计分。 */
+  /* 带上这份实验的指纹。没有它，老师收到一堆回执分不清对应的是哪一场实验、
+     哪套参数——标题是学生可编辑的自由文本，同名旧版本也认不出来。 */
   var receipt = enc({v:1, n:($("sName").value||"").trim(), t:lab.title, tpl:lab.tpl,
+                     fp:sum36(JSON.stringify(lab)),
                      p:sState.preds, a:sState.answers, s:[r.got, r.total], sk:r.skipped,
                      ts:new Date().toISOString().slice(0,16)});
   h += '<div class="note"><b>把下面这段回执码交给老师。</b>它只是一段编码文本，留在你这台设备上，没有任何东西被发出去。</div>';
@@ -1299,18 +1336,35 @@ $("itemAdd").onclick = function(){
 };
 $("gen").onclick = function(){
   if(!tState.items.length){ $("genHint").textContent = "至少加一道题再生成。"; return; }
-  var lab = currentLab(), code = enc(lab);
+  var lab = currentLab(), code = enc(lab), T = TEMPLATES[lab.tpl];
+  var url = location.href.split("#")[0] + "#lab=" + code;
   $("labCode").value = code;
-  $("copyLink").disabled = false; $("tryIt").disabled = false;
+  $("labLink").value = url;
+  $("tryIt").disabled = false;
+  $("outBox").style.display = "";
+
+  /* 用人话复述一遍要发出去的是什么——老师看一串 base64 是看不出对错的 */
+  var ps = T.params.map(function(p){
+    var u = p.unit ? (p.unit === "°" ? p.unit : " " + p.unit) : "";
+    return esc(p.label) + " <b>" + esc(fmtParam(lab.params[p.k], p)) + esc(u) + "</b>";
+  }).join("、");
+  var nNum = lab.items.filter(function(i){ return i.type==="num"; }).length;
+  var nCho = lab.items.length - nNum;
+  var qs = [nNum ? nNum + " 道数值题" : "", nCho ? nCho + " 道选择题" : ""].filter(Boolean).join(" + ");
+  $("recap").innerHTML =
+      '<div class="t">' + esc(lab.title) + (lab.by ? ' <span style="font-weight:400;color:var(--ink-2)">· ' + esc(lab.by) + '</span>' : "") + '</div>'
+    + '<div class="l">' + esc(T.name) + '：' + ps + '</div>'
+    + '<div class="l">学生要先预测 <b>' + lab.preds.length + '</b> 个量，再答 <b>' + qs + '</b></div>';
+
+
   var f = fidelity(lab.tpl, lab.params);
-  var warn = f.level === "bad" ? "　⚠ 这套参数的引擎偏差 " + fmt(f.worst,1) + "%，数值题建议改成选择题。"
-           : (f.level === "warn" ? "　容差建议不小于 " + Math.ceil(f.worst*1.5) + "%。" : "");
-  $("genHint").textContent = "实验码 " + code.length + " 字符，含 " + lab.preds.length + " 个预测、" + lab.items.length + " 道题。" + warn;
+  $("genHint").textContent = f.level === "bad"
+      ? "⚠ 这套参数的引擎偏差 " + fmt(f.worst,1) + "%，数值题建议改成趋势判断的选择题。"
+      : (f.level === "warn" ? "这套参数偏差 " + fmt(f.worst,1) + "%，数值题容差建议不小于 " + Math.ceil(f.worst*1.5) + "%。"
+                            : "这套参数实测与理论对得上，可以出定量题。");
 };
-$("copyLink").onclick = function(){
-  var url = location.href.split("#")[0] + "#lab=" + $("labCode").value;
-  copy(url, $("copyLink"), "链接已复制");
-};
+$("copyLink").onclick = function(){ copy($("labLink").value, $("copyLink"), "已复制"); };
+$("copyCode").onclick = function(){ copy($("labCode").value, $("copyCode"), "已复制"); };
 /* 这是唯一一条绕过 failLoad 的开实验路径，不包起来就会留下「切到学生页、
    loadBox 已隐藏、sWrap 还挂着上一份实验、一个字提示都没有」的死局 */
 $("tryIt").onclick = function(){
@@ -1356,6 +1410,8 @@ $("decode").onclick = function(){
           + '　<span style="color:var(--ink-3)">'+esc(r.ts||"")+'</span><br>得分 <b>'
           + esc(num(s[0])?String(s[0]):"?") + " / " + esc(num(s[1])?String(s[1]):"?") + "</b>"
           + (num(r.sk) && r.sk > 0 ? '<span style="color:var(--warn)">　另有 ' + esc(String(r.sk)) + ' 题未计分</span>' : "")
+          + (typeof r.fp === "string" ? '<br><span style="color:var(--ink-3);font-size:12.5px">实验指纹 '
+              + esc(r.fp) + '　同一场实验的回执，这一串应当相同</span>' : "")
           + "</div>";
     if(r.p && typeof r.p === "object" && Object.keys(r.p).length){
       h += '<div class="note" style="margin-top:8px"><b>他当初的预测</b><br>';
