@@ -26,6 +26,18 @@ check_page() {
   # 1. 署名 —— 对外作品的固定要求
   grep -qF "$BYLINE" "$f" && ok "署名存在" || bad "页脚缺少署名：$BYLINE"
 
+  # 2. 发布日期 —— 与署名同为固定要求，格式 YYYY-MM-DD，用 <time datetime>
+  if grep -qE '<time datetime="[0-9]{4}-[0-9]{2}-[0-9]{2}">[0-9]{4}-[0-9]{2}-[0-9]{2}</time>' "$f"; then
+    ok "发布日期存在（$(grep -oE '<time datetime="[0-9-]{10}"' "$f" | head -1 | grep -oE '[0-9-]{10}')）"
+  else
+    bad '页脚缺少发布日期，需形如 <time datetime="YYYY-MM-DD">YYYY-MM-DD</time>'
+  fi
+
+  # 2b. 页脚不许有免责声明式说明文字 —— 只要作者和日期
+  if grep -qE '演示数据说明|不含任何真实学生数据|不携带任何密钥' "$f"; then
+    bad "页脚含说明/免责文字，按要求只保留作者与日期"
+  else ok "页脚无多余说明文字"; fi
+
   # 2. charset —— 漏了整页中文变乱码，且构建期零报错
   grep -qiE '<meta[^>]+charset' "$f" && ok "有 charset 声明" \
     || bad "缺 <meta charset=\"utf-8\">，中文会变乱码"
