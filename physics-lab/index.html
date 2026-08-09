@@ -407,7 +407,22 @@ function velOf(b){ return {x:b.position.x-b.positionPrev.x, y:b.position.y-b.pos
 
 var DEG = Math.PI/180;
 function fmt(v,n){ if(v===null||v===undefined||!isFinite(v)) return "—"; return v.toFixed(n===undefined?2:n); }
-function pct(a,b){ if(!isFinite(a)||!isFinite(b)||Math.abs(b)<1e-9) return null; return (a-b)/Math.abs(b)*100; }
+function num(v){ return typeof v === "number" && isFinite(v); }   /* isFinite(null) 是 true，别用它当守卫 */
+/* 屏幕上这个量只显示 q.n 位小数，学生读不出比这更细的差别。
+   容差不能比可读精度还细——否则「你填 0.00，实测 0.00，判错」。 */
+/* 半个末位：四舍五入到 n 位小数时，学生能读到的最大误差就是半个末位。
+   取一整个末位会放过屏幕上明显看得出不一样的答案（0.12 显示下 0.11 和 0.13 都算对）。 */
+function floorOf(q){ return 0.5 * Math.pow(10, -(q && q.n !== undefined ? q.n : 2)); }
+function normTol(t){ var v = parseFloat(t); return num(v) ? Math.min(50, Math.max(1, v)) : 5; }
+/* 比较实测与理论，把「比不了」和「比过了，差多少」分开报，不许静默当 0 */
+function compare(m, t, floor){
+  if(!num(m)) return {state:"nomeas"};                    /* 实验没跑出这个量 */
+  if(!num(t)) return {state:"notheory"};
+  if(Math.abs(t) < floor) return Math.abs(m) < floor
+    ? {state:"zero", d:0}                                  /* 双方都在可读精度内的 0，视为一致 */
+    : {state:"absdiff", abs:m-t};                          /* 理论 0 而实测不是 0，要报 */
+  return {state:"rel", d:(m-t)/Math.abs(t)*100};
+}
 
 /* ---------- 三个实验模板 ---------- */
 var TEMPLATES = {
@@ -443,6 +458,9 @@ var TEMPLATES = {
       setVel(ball, v*Math.cos(th), -v*Math.sin(th));
       sim.ball = ball; sim.y0 = y0; sim.x0 = x0; sim.prev = null;
       sim.groundY = sim.view.h*ppm - 1.0*ppm;
+      /* 截断时间按解析解定，不要写死。写死 30 s 时 g=1.6/v0=26/θ=75° 的飞行是 31.4 s，
+         球还在空中就 done=true，meas 停在 null，学生填什么都判错。 */
+      sim.tCap = Math.max(8, this.theory(p).flight * 1.6);
       sim.meas = {range:null, apex:0, flight:null};
     },
     step: function(sim){
@@ -458,15 +476,20 @@ var TEMPLATES = {
         sim.done = true;
       }
       sim.prev = {x:b.position.x, y:b.position.y};
-      if(tsec(sim) > 30) sim.done = true;
+      if(tsec(sim) > sim.tCap) sim.done = true;
     },
     readouts: function(sim){
       var ppm = this.ppm, b = sim.ball, v = velOf(b);
       return [
-        {k:"x",  label:"水平位移", v:fmt((b.position.x-sim.x0)/ppm), u:"m"},
+        /* 落地后必须印判分用的那个插值值，不能印末帧位置。
+           两者差一个 tick 的位移（系统偏置 0.013%–2.1%），容差 1–2% 时学生
+           照屏幕原样填反而判错，反馈还写「你填 1.50，实测 1.48」——
+           读数与判分真值必须是同一个数，这是第三次栽在同一件事上。 */
+        {k:"x",  label:"水平位移", v:fmt(num(sim.meas.range) ? sim.meas.range : (b.position.x-sim.x0)/ppm), u:"m"},
         {k:"h",  label:"离地高度", v:fmt(Math.max(0,(sim.y0-b.position.y)/ppm)), u:"m"},
+        {k:"apex", label:"最大高度", v:fmt(sim.meas.apex), u:"m"},   /* 可出题的量必须能读到 */
         {k:"v",  label:"速率",     v:fmt(tickToMs(Math.hypot(v.x,v.y), ppm, sim.dt)), u:"m/s"},
-        {k:"t",  label:"时间",     v:fmt(tsec(sim)), u:"s"}
+        {k:"t",  label:"时间",     v:fmt(num(sim.meas.flight) ? sim.meas.flight : tsec(sim)), u:"s"}
       ];
     },
     draw: function(sim, g){ drawGround(sim, g, sim.groundY); drawTrail(sim, g); drawBall(sim, g, sim.ball); }
@@ -560,6 +583,7 @@ var TEMPLATES = {
       return [
         {k:"d", label:"滑行距离", v:fmt(d), u:"m"},
         {k:"v", label:"速率",     v:fmt(tickToMs(Math.hypot(v.x,v.y), ppm, sim.dt)), u:"m/s"},
+        {k:"a", label:"下滑加速度", v:fmt(sim.meas.accel), u:"m/s²"},   /* 3 秒窗口拟合完才有值 */
         {k:"t", label:"时间",     v:fmt(tsec(sim)), u:"s"}
       ];
     },
@@ -569,7 +593,12 @@ var TEMPLATES = {
   collision: {
     name: "一维碰撞",
     desc: "两球在无重力、无摩擦的直线上对撞。恢复系数 e=1 完全弹性、e=0 完全非弹性。这个模板专门用来看引擎的守恒误差——碰撞求解器是 matter.js 最不准的地方。",
-    ppm: 16, grav: false,
+    /* ppm 不只是显示比例，它决定速度换算成 px/tick 后的大小，而 matter.js 的
+       Resolver._restingThresh = 2 是按 px/tick 判的：法向速度低于它就被当成「静止接触」，
+       冲量趋于 0，动量完全不传递。ppm=16 时阈值 = 2×60/16 = 7.5 m/s，
+       正好把滑条下三分之一的量程送进引擎死区（实测悬崖就在 7.5）。
+       ppm=110 时阈值降到 1.09 m/s，低于滑条最小值 2。 */
+    ppm: 110, grav: false,
     view: function(){ return {w:34, h:10}; },
     params: [
       {k:"m1", label:"左球质量 m₁", unit:"kg",  min:.5, max:8,  step:.1, def:2},
@@ -630,12 +659,14 @@ var TEMPLATES = {
         {k:"v1", label:"左球速度", v:fmt(v1), u:"m/s"},
         {k:"v2", label:"右球速度", v:fmt(v2), u:"m/s"},
         {k:"p",  label:"总动量",   v:fmt(p.m1*v1 + p.m2*v2, 1), u:"kg·m/s"},
+        /* 动能损失率可以出题，就必须能读到 */
+        {k:"kl", label:"动能损失率", v:fmt(100*(1 - (0.5*p.m1*v1*v1 + 0.5*p.m2*v2*v2)/(0.5*p.m1*p.v1*p.v1)), 1), u:"%"},
         {k:"t",  label:"时间",     v:fmt(tsec(sim)), u:"s"}
       ];
     },
     draw: function(sim, g){
       var ppm = this.ppm, y = sim.view.h*ppm*0.45 + 1.3*ppm;
-      g.strokeStyle = css("--ground"); g.lineWidth = 2; g.beginPath();
+      g.strokeStyle = css("--ground"); g.lineWidth = 2/(sim.scale||1); g.beginPath();
       g.moveTo(0, y); g.lineTo(sim.view.w*ppm, y); g.stroke();
       drawBall(sim, g, sim.b1); drawBall(sim, g, sim.b2, true);
     }
@@ -657,21 +688,30 @@ function css(v){
   if(cssCache[v] === undefined) cssCache[v] = getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   return cssCache[v];
 }
-function refreshCss(){ cssCache = {}; }
+/* 只清缓存不重画，系统切深色后画布会一直停在浅色，要等一次 resize 才跟上。
+   画布是这个页面的主角，不能等。 */
+function refreshCss(){
+  cssCache = {};
+  if(typeof tState !== "undefined" && tState.sim) renderSim(tState.sim);
+  if(typeof sState !== "undefined" && sState.sim) renderSim(sState.sim);
+}
 if(window.matchMedia) try{ window.matchMedia("(prefers-color-scheme:dark)").addEventListener("change", refreshCss); }catch(e){}
 
 function drawGrid(sim, g){
   var T = sim.tpl, ppm = T.ppm, V = sim.view;
-  g.strokeStyle = css("--grid"); g.lineWidth = 1; g.font = "11.5px " + css("--sans"); g.fillStyle = css("--ink-3");
+  /* 字号和线宽必须除以视图缩放，否则它们是世界像素、跟着 ppm 一起被压。
+     碰撞模板 ppm 从 16 提到 110 后 scale 掉到 0.14，标尺字变成 1.6 css px 一团糊。 */
+  var k = 1 / (sim.scale || 1);
+  g.strokeStyle = css("--grid"); g.lineWidth = k; g.font = (11.5*k).toFixed(1) + "px " + css("--sans"); g.fillStyle = css("--ink-3");
   var stepM = niceStep(V.w);
   /* 标尺文字画在地面线之上，否则会被地面填充盖掉 */
-  var by = (sim.groundY !== undefined ? sim.groundY : V.h*ppm) - 6;
+  var by = (sim.groundY !== undefined ? sim.groundY : V.h*ppm) - 6*k;
   for(var x=0; x<=V.w; x+=stepM){
-    g.beginPath(); g.moveTo(x*ppm+.5, 0); g.lineTo(x*ppm+.5, V.h*ppm); g.stroke();
-    if(x>0) g.fillText(x+"m", x*ppm+3, by);
+    g.beginPath(); g.moveTo(x*ppm, 0); g.lineTo(x*ppm, V.h*ppm); g.stroke();
+    if(x>0) g.fillText(x+"m", x*ppm+3*k, by);
   }
   for(var y=0; y<=V.h; y+=stepM){
-    g.beginPath(); g.moveTo(0, y*ppm+.5); g.lineTo(V.w*ppm, y*ppm+.5); g.stroke();
+    g.beginPath(); g.moveTo(0, y*ppm); g.lineTo(V.w*ppm, y*ppm); g.stroke();
   }
 }
 function niceStep(wM){
@@ -683,7 +723,7 @@ function drawGround(sim, g, y){
 }
 function drawTrail(sim, g){
   if(sim.trail.length < 2) return;
-  g.strokeStyle = css("--accent"); g.globalAlpha = .32; g.lineWidth = 2; g.lineJoin = "round";
+  g.strokeStyle = css("--accent"); g.globalAlpha = .32; g.lineWidth = 2/(sim.scale||1); g.lineJoin = "round";
   g.beginPath(); g.moveTo(sim.trail[0].x, sim.trail[0].y);
   for(var i=1;i<sim.trail.length;i++) g.lineTo(sim.trail[i].x, sim.trail[i].y);
   g.stroke(); g.globalAlpha = 1;
@@ -735,6 +775,7 @@ function renderSim(sim){
   var T = sim.tpl, cv = sim.canvas, g = cv.getContext("2d");
   var wCss = cv.clientWidth || 520, dpr = Math.min(window.devicePixelRatio || 1, 2);
   var scale = wCss / (sim.view.w*T.ppm), hCss = sim.view.h*T.ppm*scale;
+  sim.scale = scale;                          /* 画线/写字时要按它反向补偿 */
   if(cv.width !== Math.round(wCss*dpr) || cv.height !== Math.round(hCss*dpr)){
     cv.width = Math.round(wCss*dpr); cv.height = Math.round(hCss*dpr);
     cv.style.height = hCss + "px";
@@ -755,51 +796,149 @@ function runHeadless(tplKey, params, maxTicks){
 /* ---------- 引擎偏差评估 ---------- */
 function fidelity(tplKey, params){
   var T = TEMPLATES[tplKey], th = T.theory(params), sim = runHeadless(tplKey, params);
-  var rows = [], worst = 0;
+  var rows = [], worst = 0, nomeas = 0, absbad = 0, compared = 0, notheory = 0;
   T.quantities.forEach(function(q){
-    var m = sim.meas[q.k], t = th[q.k], d = null;
-    if(q.k === "keLoss"){ d = (m!==null && isFinite(t)) ? (m - t) : null; }  /* 百分比量取绝对差 */
-    else d = pct(m, t);
-    if(d !== null && isFinite(d)) worst = Math.max(worst, Math.abs(d));
-    rows.push({label:q.label, unit:q.unit, m:m, t:t, d:d, n:q.n});
+    var m = sim.meas[q.k], t = th[q.k], floor = floorOf(q);
+    var c = q.unit === "%" ? (num(m) && num(t) ? {state:"rel", d:m-t} : {state:num(m)?"notheory":"nomeas"})
+                           : compare(m, t, floor);        /* 百分比量本身就是比率，取绝对差 */
+    if(c.state === "nomeas") nomeas++;
+    else if(c.state === "absdiff") absbad++;
+    else if(c.state === "rel"){ compared++; worst = Math.max(worst, Math.abs(c.d)); }
+    else if(c.state === "zero") compared++;
+    else notheory++;                       /* 拿不到解析解也是「没对照上」，不许不进桶 */
+    rows.push({label:q.label, unit:q.unit, m:m, t:t, c:c, n:q.n});
   });
   var extra = null;
-  if(tplKey === "collision" && sim.meas.pAfter !== undefined && sim.meas.pAfter !== null){
-    extra = {label:"动量守恒残差", v:pct(sim.meas.pAfter, th.p0)};
-    if(extra.v !== null) worst = Math.max(worst, Math.abs(extra.v));
+  if(tplKey === "collision" && num(sim.meas.pAfter)){
+    var pc = compare(sim.meas.pAfter, th.p0, 1e-6);
+    extra = {label:"动量守恒残差", c:pc};
+    if(pc.state === "rel") worst = Math.max(worst, Math.abs(pc.d));
   }
-  var level = worst < 2 ? "good" : (worst < 10 ? "warn" : "bad");
-  return {rows:rows, worst:worst, level:level, extra:extra, meas:sim.meas, theory:th};
+  /* 判定必须把「比不了」当成一种坏状态，不能因为拿不到偏差就默认 good。
+     这里踩过：理论值为 0 时旧的 pct() 返回 null，整行被跳过，worst 停在 0，
+     面板打出「偏差 0.0%，可以出定量题」，而那套参数一个量都没验证过。 */
+  var level;
+  if(nomeas > 0 || absbad > 0 || notheory > 0) level = "bad";
+  else if(compared === 0) level = "bad";
+  else level = worst < 2 ? "good" : (worst < 10 ? "warn" : "bad");
+  return {rows:rows, worst:worst, level:level, extra:extra, meas:sim.meas, theory:th,
+          nomeas:nomeas, absbad:absbad, compared:compared, notheory:notheory};
+}
+function cTxt(c, unit){
+  if(!c) return "—";
+  if(c.state === "nomeas")  return "没跑出";
+  if(c.state === "notheory")return "无解析解";
+  if(c.state === "zero")    return "一致（均为 0）";
+  if(c.state === "absdiff") return "理论 0，实测 " + fmt(c.abs, 3);
+  return (c.d>0?"+":"") + fmt(c.d,1) + (unit === "%" ? "pp" : "%");
 }
 function fidHTML(f){
-  var head = {
+  var head;
+  if(f.nomeas > 0)
+    head = "<b>有 " + f.nomeas + " 个量这套参数下根本没跑出来。</b>实验在测到它之前就结束了，"
+         + "这些量不能出题——学生填什么都判错，连正确答案都给不出。改参数。";
+  else if(f.absbad > 0)
+    head = "<b>有 " + f.absbad + " 个量理论为 0，实测不为 0。</b>引擎在这里有残留量，"
+         + "别拿这些量出定量题。";
+  else if(f.notheory > 0)
+    head = "<b>有 " + f.notheory + " 个量算不出解析解。</b>没有参照就没法说引擎准不准，不要出定量题。";
+  else if(f.compared === 0)
+    head = "<b>这套参数没有任何量能与理论对照。</b>不要出定量题。";
+  else head = {
     good: "<b>偏差 " + fmt(f.worst,1) + "%，可以出定量题。</b>实测与理论对得上。",
     warn: "<b>偏差 " + fmt(f.worst,1) + "%，定量题要放宽容差。</b>下面偏差大的那一行，别拿来当精确读数考。",
     bad:  "<b>偏差 " + fmt(f.worst,1) + "%，这套参数不要出定量题。</b>求解器在这里误差过大，改成趋势判断的选择题。"
   }[f.level];
   var h = '<div class="fid ' + f.level + '">' + head;
-  h += '<table><thead><tr><th>量</th><th>实测</th><th>理论</th><th>偏差</th></tr></thead><tbody>';
+  h += '<table><thead><tr><th>量</th><th>实测</th><th>理论</th><th>对照</th></tr></thead><tbody>';
   f.rows.forEach(function(r){
-    var dTxt = r.d===null ? "—" : (r.unit==="%" ? (r.d>0?"+":"")+fmt(r.d,1)+"pp" : (r.d>0?"+":"")+fmt(r.d,1)+"%");
-    h += "<tr><td>" + r.label + "</td><td>" + fmt(r.m,r.n) + "</td><td>" + fmt(r.t,r.n) + "</td><td>" + dTxt + "</td></tr>";
+    h += "<tr><td>" + r.label + "</td><td>" + fmt(r.m,r.n) + "</td><td>" + fmt(r.t,r.n) + "</td><td>" + cTxt(r.c, r.unit) + "</td></tr>";
   });
-  if(f.extra) h += '<tr><td>' + f.extra.label + '</td><td colspan="2"></td><td>' + (f.extra.v===null?"—":(f.extra.v>0?"+":"")+fmt(f.extra.v,2)+"%") + "</td></tr>";
+  if(f.extra) h += '<tr><td>' + f.extra.label + '</td><td colspan="2"></td><td>' + cTxt(f.extra.c, "") + "</td></tr>";
   h += "</tbody></table></div>";
   return h;
 }
 
 /* ---------- 编解码 ---------- */
+/* 实验码走微信转发和手工复制，掉字符是常态。没有校验位时，212 个位置里有 50 个
+   改一个字符仍能解成**另一场合法实验**——学生做的不是老师出的那场，两边都无感。
+   前缀一个 djb2 校验码，坏掉的码当场拒收而不是安静地变成别的实验。 */
+function sum36(str){
+  var h = 5381;
+  for(var i=0;i<str.length;i++) h = (((h<<5) + h + str.charCodeAt(i)) >>> 0);
+  return h.toString(36);
+}
 function enc(obj){
-  var bytes = new TextEncoder().encode(JSON.stringify(obj)), bin = "";
+  var json = JSON.stringify(obj);
+  var bytes = new TextEncoder().encode(json), bin = "";
   for(var i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+  return sum36(json) + "." + btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 }
 function dec(s){
-  s = String(s||"").trim().replace(/^.*#lab=/,"").replace(/^.*#r=/,"").replace(/-/g,"+").replace(/_/g,"/");
-  while(s.length % 4) s += "=";
-  var bin = atob(s), bytes = new Uint8Array(bin.length);
+  s = String(s||"").trim().replace(/^.*#lab=/,"").replace(/^.*#r=/,"");
+  var dot = s.indexOf(".");
+  if(dot < 1) throw new Error("这段码不完整");
+  var want = s.slice(0, dot);
+  var b = s.slice(dot+1).replace(/-/g,"+").replace(/_/g,"/");
+  while(b.length % 4) b += "=";
+  var bin;
+  try{ bin = atob(b); }
+  catch(_){ throw new Error("这段码里有不该出现的字符"); }   /* 别把浏览器的英文异常甩给中学生 */
+  var bytes = new Uint8Array(bin.length);
   for(var i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
-  return JSON.parse(new TextDecoder().decode(bytes));
+  var json;
+  try{ json = new TextDecoder().decode(bytes); }
+  catch(_){ throw new Error("这段码解不开"); }
+  if(sum36(json) !== want) throw new Error("这段码在传递过程中损坏了");
+  return JSON.parse(json);
+}
+/* 实验码来自不可信渠道——它是一段会被转发、可被任意改写的文本。
+   在碰 DOM 之前先把结构验干净：否则 openLab 会先把学生界面亮出来、写好标题，
+   再在渲染题目时抛错，留下一个有标题、没题目、跑不动、还看不到错误提示的空实验。 */
+function has(obj, k){ return Object.prototype.hasOwnProperty.call(obj, k); }  /* 别让 constructor / toString 混进来 */
+function validateLab(src){
+  if(!src || typeof src !== "object") throw new Error("不是一份实验");
+  if(!has(TEMPLATES, src.tpl)) throw new Error("实验类型不认识");
+  var T = TEMPLATES[src.tpl];
+  if(!src.params || typeof src.params !== "object") throw new Error("缺参数");
+  /* 一律产出新对象，绝不就地改写传进来的那份——DEMO 是模块级唯一的一份，
+     就地改写等于每打开一次示例就永久改掉它一点。 */
+  var lab = {v:1, tpl:src.tpl, params:{}, preds:[], items:[]};
+  T.params.forEach(function(d){
+    var v = parseFloat(src.params[d.k]);
+    if(!num(v)) throw new Error("参数「" + d.label + "」不是数字");
+    /* 越界不夹、直接拒。夹住的话学生做的就不是老师编码进去的那场实验，
+       而参数表印的是夹后的值，两边都看不出被改过。 */
+    if(v < d.min || v > d.max) throw new Error("参数「" + d.label + "」超出范围");
+    lab.params[d.k] = v;
+  });
+  var keys = {}; T.quantities.forEach(function(q){ keys[q.k] = 1; });
+  var sp = Array.isArray(src.preds) ? src.preds : [];
+  sp.forEach(function(x){
+    /* 静默丢一条预测项，「先预测才能运行」这条产品主张就无声消失了：
+       学生看到 0 个输入框、锁被隐藏、直接点运行，两边都收不到信号。所以丢=报错。 */
+    if(!x || !has(keys, x.key)) throw new Error("有一条预测项读不出来");
+    if(lab.preds.some(function(y){ return y.key === x.key; })) throw new Error("预测项重复");
+    lab.preds.push({key:x.key});
+  });
+  var si = Array.isArray(src.items) ? src.items : [];
+  if(!si.length) throw new Error("这份实验没有题目");
+  si.forEach(function(it){
+    if(!it) throw new Error("有一道题读不出来");
+    if(it.type === "num"){
+      if(!has(keys, it.key)) throw new Error("有一道数值题问的量不认识");
+      lab.items.push({type:"num", key:it.key, tol:normTol(it.tol)});
+    }else if(it.type === "choice"){
+      if(typeof it.q !== "string" || !Array.isArray(it.opts) || it.opts.length < 2
+         || !it.opts.every(function(o){ return typeof o === "string"; })
+         || !Number.isInteger(it.ans) || it.ans < 0 || it.ans >= it.opts.length)
+        throw new Error("有一道选择题结构不对");
+      lab.items.push({type:"choice", q:it.q, opts:it.opts.slice(), ans:it.ans});
+    }else throw new Error("有一道题的题型不认识");
+  });
+  lab.title = typeof src.title === "string" && src.title ? src.title : "实验";
+  lab.by    = typeof src.by    === "string" ? src.by : "";
+  return lab;
 }
 
 /* ---------- 通用 UI 小工具 ---------- */
@@ -836,7 +975,7 @@ function buildParams(){
     inp.addEventListener("input", function(){
       tState.params[p.k] = parseFloat(inp.value);
       val.textContent = fmtParam(tState.params[p.k], p) + (p.unit||"");
-      resetT();
+      resetT(); staleCode();
     });
     s.appendChild(inp); s.appendChild(val); f.appendChild(s); host.appendChild(f);
   });
@@ -846,7 +985,22 @@ function buildParams(){
     qs.forEach(function(q){ var o = document.createElement("option"); o.value = q.k; o.textContent = q.label + (q.unit?" ("+q.unit+")":""); sel.appendChild(o); });
   });
 }
-function fmtParam(v, p){ return (p.step < 1) ? v.toFixed(p.step < .1 ? 2 : (p.step<.5?2:1)) : String(v); }
+/* 生成实验码之后又改了参数或题目，码就和屏幕对不上了。
+   踩过：老师生成后顺手把角度从 45° 调到 70°，复制链接发进班级群，
+   学生做的是 45° 那份，判分也按 45° 来，全程零提示。 */
+function staleCode(){
+  if(!$("labCode").value) return;
+  $("labCode").value = "";
+  $("copyLink").disabled = true; $("tryIt").disabled = true;
+  $("genHint").textContent = "参数或题目改过了，刚才那段实验码已作废——请重新点「生成实验码」。";
+}
+/* 标题和出题人同样进实验码（currentLab 里就有），改了不作废是同一个失效 */
+["labTitle","labBy"].forEach(function(id){ $(id).addEventListener("input", staleCode); });
+function fmtParam(v, p){
+  var n = parseFloat(v);
+  if(!num(n)) return "—";                     /* 码里塞了非数字就显示占位，不要把它当字符串印出去 */
+  return (p.step < 1) ? n.toFixed(p.step < .1 ? 2 : (p.step<.5?2:1)) : String(n);
+}
 
 function resetT(){
   if(tState.raf) cancelAnimationFrame(tState.raf), tState.raf = null;
@@ -877,7 +1031,7 @@ function renderPreds(){
     var q = TEMPLATES[tState.tplKey].quantities.filter(function(x){return x.k===p.key;})[0] || {label:p.key,unit:""};
     var li = el("li");
     li.innerHTML = '<div class="qh"><div><p class="qt">你觉得 '+q.label+' 会是多少？</p><span class="hint">单位 '+(q.unit||"—")+'　·　答错不扣分</span></div><span class="tag p">预测</span></div>';
-    var b = el("button","del","移除"); b.onclick = function(){ tState.preds.splice(i,1); renderPreds(); };
+    var b = el("button","del","移除"); b.onclick = function(){ tState.preds.splice(i,1); renderPreds(); staleCode(); };
     li.querySelector(".qh").appendChild(b); host.appendChild(li);
   });
 }
@@ -888,13 +1042,13 @@ function renderItems(){
     var li = el("li"), body;
     if(it.type === "num"){
       var q = TEMPLATES[tState.tplKey].quantities.filter(function(x){return x.k===it.key;})[0] || {label:it.key,unit:""};
-      body = '<p class="qt">测得的'+q.label+'是多少'+(q.unit?"（"+q.unit+"）":"")+'？</p><span class="hint">答案由实验实测生成　·　容差 ±'+it.tol+'%</span>';
+      body = '<p class="qt">测得的'+q.label+'是多少'+(q.unit?"（"+q.unit+"）":"")+'？</p><span class="hint">答案由实验实测生成　·　容差 ±'+normTol(it.tol)+'%</span>';
       li.innerHTML = '<div class="qh"><div>'+body+'</div><span class="tag">数值</span></div>';
     }else{
       body = '<p class="qt">'+esc(it.q)+'</p><span class="hint">正确：'+esc(it.opts[it.ans])+'</span>';
       li.innerHTML = '<div class="qh"><div>'+body+'</div><span class="tag">选择</span></div>';
     }
-    var b = el("button","del","移除"); b.onclick = function(){ tState.items.splice(i,1); renderItems(); };
+    var b = el("button","del","移除"); b.onclick = function(){ tState.items.splice(i,1); renderItems(); staleCode(); };
     li.querySelector(".qh").appendChild(b); host.appendChild(li);
   });
 }
@@ -912,7 +1066,16 @@ function currentLab(){
 /* ================= 学生作答 ================= */
 var sState = {lab:null, sim:null, raf:null, locked:false, preds:{}, answers:{}, submitted:false, truth:null};
 
+/* 打不开时必须把显示状态回滚。踩过：错误提示写进了已经 display:none 的 loadBox，
+   学生看到一个有标题的空实验，一个字的提示都看不到。 */
+function failLoad(msg){
+  $("sWrap").style.display = "none";
+  $("loadBox").style.display = "";
+  $("loadHint").textContent = msg;
+  switchTab("s");
+}
 function openLab(lab){
+  lab = validateLab(lab);                 /* 先验，验不过在碰 DOM 之前就抛 */
   sState.lab = lab; sState.locked = false; sState.preds = {}; sState.answers = {}; sState.submitted = false;
   sState.truth = runHeadless(lab.tpl, lab.params);      /* 固定步长 → 与学生跑出来的一致 */
   $("sWrap").style.display = ""; $("loadBox").style.display = "none";
@@ -923,7 +1086,8 @@ function openLab(lab){
   var ps = $("sParams"); ps.innerHTML = "<h3>实验参数</h3>";
   var tbl = el("div"); tbl.style.fontSize = "13.5px"; tbl.style.color = "var(--ink-2)";
   T.params.forEach(function(p){
-    tbl.innerHTML += "<div style='display:flex;justify-content:space-between;padding:2px 0'><span>"+p.label+"</span><b style='font-variant-numeric:tabular-nums;color:var(--ink)'>"+fmtParam(lab.params[p.k],p)+" "+(p.unit||"")+"</b></div>";
+    /* 实验码是可以被任意转发和篡改的文本，params 里的值一律当敌意输入 */
+    tbl.innerHTML += "<div style='display:flex;justify-content:space-between;padding:2px 0'><span>"+esc(p.label)+"</span><b style='font-variant-numeric:tabular-nums;color:var(--ink)'>"+esc(fmtParam(lab.params[p.k],p))+" "+esc(p.unit||"")+"</b></div>";
   });
   ps.appendChild(tbl);
 
@@ -988,45 +1152,73 @@ function runS(){
 }
 function grade(){
   var lab = sState.lab, T = TEMPLATES[lab.tpl], truth = sState.truth.meas;
-  var got = 0, detail = [];
+  var got = 0, gradable = 0, detail = [];
   lab.items.forEach(function(it, i){
     if(it.type === "num"){
-      var q = T.quantities.filter(function(x){return x.k===it.key;})[0];
+      var q = T.quantities.filter(function(x){return x.k===it.key;})[0] || {label:it.key, unit:"", n:2};
       var raw = $("ans_"+i).value, mine = parseFloat(raw), want = truth[it.key];
-      var ok = raw !== "" && isFinite(mine) && isFinite(want) && Math.abs(mine-want) <= Math.abs(want)*it.tol/100;
+      var tol = normTol(it.tol);
+      sState.answers["q"+i] = raw === "" ? null : (num(mine) ? mine : null);
+      if(!num(want)){
+        /* 实验没跑出这个量。不能判分，也不许判错——学生没有任何答案能对。 */
+        detail.push({i:i+1, ok:null,
+          txt:"测"+q.label+"：这次实验没跑出这个量，本题不计分（出题参数的问题，不是你的）"});
+        return;
+      }
+      gradable++;
+      /* 容差取「相对容差」与「屏幕可读精度」二者的大者。
+         只用相对容差时，实测≈0 会把容差带压成 0：学生照着读数填 0，
+         反馈印「你填 0.00，实测 0.00」然后判错。踩过两次（斜面静止、碰撞浮点尘埃）。 */
+      var band = Math.max(Math.abs(want)*tol/100, floorOf(q));
+      var ok = raw !== "" && num(mine) && Math.abs(mine-want) <= band;
       if(ok) got++;
-      detail.push({i:i+1, ok:ok, txt:"测"+q.label+"：你填 "+(raw===""?"（空）":fmt(mine,q.n))+"，实测 "+fmt(want,q.n)+" "+q.unit+"（容差 ±"+it.tol+"%）"});
-      sState.answers["q"+i] = raw === "" ? null : mine;
+      detail.push({i:i+1, ok:ok, txt:"测"+q.label+"：你填 "+(raw===""?"（空）":(num(mine)?fmt(mine,q.n):"（不是数字）"))
+        +"，实测 "+fmt(want,q.n)+" "+q.unit+"（容差 ±"+fmt(band,Math.max(q.n,3))+" "+q.unit+"）"});
     }else{
       var sel = document.querySelector('input[name="ans_'+i+'"]:checked');
-      var j = sel ? parseInt(sel.value,10) : -1, ok2 = j === it.ans;
+      var j = sel ? parseInt(sel.value,10) : -1;
+      var ansOk = Number.isInteger(it.ans) && it.ans >= 0 && it.ans < it.opts.length;
+      sState.answers["q"+i] = j;
+      if(!ansOk){
+        detail.push({i:i+1, ok:null, txt:esc(it.q.replace(/[：:？?，,]\s*$/,""))+"：这道题的正确答案标错了，本题不计分"});
+        return;
+      }
+      gradable++;
+      var ok2 = j >= 0 && j === it.ans;   /* 未选不能因为 ans 也是 -1 就算对 */
       if(ok2) got++;
       detail.push({i:i+1, ok:ok2, txt:esc(it.q.replace(/[：:？?，,]\s*$/,""))+"：你选「"+(j<0?"未选":esc(it.opts[j]))+"」，正确是「"+esc(it.opts[it.ans])+"」"});
-      sState.answers["q"+i] = j;
     }
   });
-  return {got:got, total:lab.items.length, detail:detail};
+  return {got:got, total:gradable, skipped:lab.items.length - gradable, detail:detail};
 }
 function showScore(r){
   var lab = sState.lab, T = TEMPLATES[lab.tpl], truth = sState.truth.meas, host = $("scoreBox");
-  var h = '<div class="res '+(r.got===r.total?"ok":"no")+'"><b>'+r.got+" / "+r.total+" 题正确</b>";
-  r.detail.forEach(function(d){ h += "<div style='margin-top:6px;font-size:13px'>"+(d.ok?"✓":"✗")+" "+d.txt+"</div>"; });
+  var h = '<div class="res '+(r.total>0 && r.got===r.total?"ok":"no")+'"><b>'+r.got+" / "+r.total+" 题正确</b>"
+        + (r.skipped ? '<span style="font-weight:400"> 　另有 '+r.skipped+' 题不计分</span>' : "");
+  r.detail.forEach(function(d){ h += "<div style='margin-top:6px;font-size:13px'>"+(d.ok===null?"—":(d.ok?"✓":"✗"))+" "+d.txt+"</div>"; });
   h += "</div>";
 
   if(lab.preds.length){
     h += '<div class="gap"><h3 style="margin:14px 0 6px">你的预测和实测差多少</h3>';
     lab.preds.forEach(function(p){
-      var q = T.quantities.filter(function(x){return x.k===p.key;})[0];
+      var q = T.quantities.filter(function(x){return x.k===p.key;})[0] || {label:p.key, unit:"", n:2};
       var mine = sState.preds[p.key], real = truth[p.key];
-      var d = pct(mine, real), a = d===null?100:Math.min(100, Math.abs(d));
-      h += "<div style='margin-bottom:12px'><div style='font-size:13.5px'>"+q.label+"</div>";
-      h += '<div class="gapbar"><i style="width:'+(100-a)+'%"></i></div>';
-      h += '<div class="gaprow"><span>你预测 '+fmt(mine,q.n)+" "+q.unit+'</span><span>实测 '+fmt(real,q.n)+" "+q.unit+"</span><span>"+(d===null?"—":(d>0?"高了 ":"低了 ")+fmt(Math.abs(d),0)+"%")+"</span></div></div>";
+      var c = compare(mine, real, floorOf(q)), fill, txt;
+      if(c.state === "rel"){ fill = 100 - Math.min(100, Math.abs(c.d)); txt = (c.d>0?"高了 ":"低了 ")+fmt(Math.abs(c.d),0)+"%"; }
+      else if(c.state === "zero"){ fill = 100; txt = "正好"; }
+      else if(c.state === "absdiff"){ fill = 0; txt = "实测接近 0"; }
+      else { fill = 0; txt = "这次实验没测出这个量"; }
+      h += "<div style='margin-bottom:12px'><div style='font-size:13.5px'>"+esc(q.label)+"</div>";
+      h += '<div class="gapbar"><i style="width:'+fill+'%"></i></div>';
+      h += '<div class="gaprow"><span>你预测 '+fmt(mine,q.n)+" "+esc(q.unit)+'</span><span>实测 '+fmt(real,q.n)+" "+esc(q.unit)+"</span><span>"+txt+"</span></div></div>";
     });
     h += "</div>";
   }
+  /* total 是「可判分题数」，不等于题目总数。不把 skipped 一起带上，
+     老师看到「3 / 3」会以为满分，看不出原本有几题没能计分。 */
   var receipt = enc({v:1, n:($("sName").value||"").trim(), t:lab.title, tpl:lab.tpl,
-                     p:sState.preds, a:sState.answers, s:[r.got, r.total], ts:new Date().toISOString().slice(0,16)});
+                     p:sState.preds, a:sState.answers, s:[r.got, r.total], sk:r.skipped,
+                     ts:new Date().toISOString().slice(0,16)});
   h += '<div class="note"><b>把下面这段回执码交给老师。</b>它只是一段编码文本，留在你这台设备上，没有任何东西被发出去。</div>';
   h += '<div class="field" style="margin-top:10px"><textarea readonly id="outReceipt">'+receipt+'</textarea></div>';
   h += '<button class="act ghost" id="copyR">复制回执码</button>';
@@ -1063,21 +1255,22 @@ $("tab-r").onclick = function(){ switchTab("r"); };
 
 tplOptions($("tpl"));
 $("tpl").onchange = function(){
+  staleCode();                       /* 先说明作废，再清状态——否则换模板是静默作废 */
   tState.tplKey = $("tpl").value; tState.params = {}; tState.preds = []; tState.items = [];
   buildParams(); renderPreds(); renderItems(); resetT();
-  $("labCode").value = ""; $("copyLink").disabled = true; $("tryIt").disabled = true; $("genHint").textContent = "";
+  $("labCode").value = ""; $("copyLink").disabled = true; $("tryIt").disabled = true;
 };
 $("runT").onclick = runT;
 $("resetT").onclick = resetT;
 $("predAdd").onclick = function(){
   var k = $("predQ").value;
   if(tState.preds.some(function(p){return p.key===k;})) return;
-  tState.preds.push({key:k}); renderPreds();
+  tState.preds.push({key:k}); renderPreds(); staleCode();
 };
 $("itemType").onchange = function(){
-  var num = $("itemType").value === "num";
-  $("numBox").style.display = num ? "" : "none";
-  $("choiceBox").style.display = num ? "none" : "";
+  var isNum = $("itemType").value === "num";     /* 别叫 num，会遮住全局那个守卫函数 */
+  $("numBox").style.display = isNum ? "" : "none";
+  $("choiceBox").style.display = isNum ? "none" : "";
 };
 $("itemAdd").onclick = function(){
   if($("itemType").value === "num"){
@@ -1085,15 +1278,24 @@ $("itemAdd").onclick = function(){
     tState.items.push({type:"num", key:$("numQty").value, tol:tol});
   }else{
     var q = ($("chQ").value||"").trim();
-    var opts = ($("chOpts").value||"").split("\n").map(function(s){return s.trim();}).filter(Boolean);
-    if(!q || opts.length < 2){ $("genHint").textContent = "选择题要有题干和至少两个选项。"; return; }
-    /* 第一行是正确答案，打乱后记住它的新位置 */
-    var right = opts[0], shuffled = opts.slice();
-    for(var i=shuffled.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=shuffled[i]; shuffled[i]=shuffled[j]; shuffled[j]=t; }
-    tState.items.push({type:"choice", q:q, opts:shuffled, ans:shuffled.indexOf(right)});
+    var raw = ($("chOpts").value||"").split("\n").map(function(s){return s.trim();}).filter(Boolean);
+    /* 选项文字重复会让判分认错人（原来用 indexOf 找正确答案，只认第一个）。
+       重复选项对学生本来也是坏题面，直接去重。 */
+    var opts = raw.filter(function(o, i){ return raw.indexOf(o) === i; });
+    if(!q || opts.length < 2){
+      $("genHint").textContent = raw.length >= 2 && opts.length < 2
+        ? "选项去重后不足两个——几个选项写的是同一句话。"
+        : "选择题要有题干和至少两个不同的选项。";
+      return;
+    }
+    /* 打乱下标而不是打乱文字，正确答案的位置就与文字内容无关了 */
+    var idx = opts.map(function(_, i){ return i; });
+    for(var i=idx.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=idx[i]; idx[i]=idx[j]; idx[j]=t; }
+    tState.items.push({type:"choice", q:q, opts:idx.map(function(k){ return opts[k]; }), ans:idx.indexOf(0)});
     $("chQ").value = "";
+    if(opts.length < raw.length) $("genHint").textContent = "有 " + (raw.length-opts.length) + " 个重复选项已去掉。";
   }
-  $("genHint").textContent = ""; renderItems();
+  renderItems(); staleCode();
 };
 $("gen").onclick = function(){
   if(!tState.items.length){ $("genHint").textContent = "至少加一道题再生成。"; return; }
@@ -1109,14 +1311,18 @@ $("copyLink").onclick = function(){
   var url = location.href.split("#")[0] + "#lab=" + $("labCode").value;
   copy(url, $("copyLink"), "链接已复制");
 };
-$("tryIt").onclick = function(){ switchTab("s"); openLab(dec($("labCode").value)); };
+/* 这是唯一一条绕过 failLoad 的开实验路径，不包起来就会留下「切到学生页、
+   loadBox 已隐藏、sWrap 还挂着上一份实验、一个字提示都没有」的死局 */
+$("tryIt").onclick = function(){
+  try{ switchTab("s"); openLab(dec($("labCode").value)); }
+  catch(e){ failLoad("这段实验码打不开（" + e.message + "）。"); }
+};
 
 $("loadLab").onclick = function(){
   try{
     var lab = dec($("inCode").value);
-    if(!lab || !TEMPLATES[lab.tpl]) throw new Error("bad");
     $("loadHint").textContent = ""; openLab(lab);
-  }catch(e){ $("loadHint").textContent = "这段码读不出来，检查一下是不是复制全了。"; }
+  }catch(e){ failLoad("这段码读不出来（" + e.message + "），检查一下是不是复制全了。"); }
 };
 $("demoLab").onclick = function(){ openLab(DEMO); };
 $("predLock").onclick = function(){
@@ -1142,13 +1348,20 @@ $("submit").onclick = function(){
 $("decode").onclick = function(){
   try{
     var r = dec($("inReceipt").value);
-    var T = TEMPLATES[r.tpl] || {quantities:[]};
-    var h = '<div class="note" style="margin-top:14px"><b>'+esc(r.n||"（未署名）")+'</b>　'+esc(r.t||"")+'　<span style="color:var(--ink-3)">'+esc(r.ts||"")+'</span><br>得分 <b>'+r.s[0]+" / "+r.s[1]+"</b></div>";
-    if(r.p && Object.keys(r.p).length){
+    if(!r || typeof r !== "object") throw new Error("结构不对");
+    var T = has(TEMPLATES, r.tpl) ? TEMPLATES[r.tpl] : {quantities:[]};  /* 原型链会让整份回执被丢掉 */
+    /* 回执码同样来自学生、同样可被改写：得分、预测的键名全部要转义 */
+    var s = Array.isArray(r.s) ? r.s : [];
+    var h = '<div class="note" style="margin-top:14px"><b>'+esc(r.n||"（未署名）")+'</b>　'+esc(r.t||"")
+          + '　<span style="color:var(--ink-3)">'+esc(r.ts||"")+'</span><br>得分 <b>'
+          + esc(num(s[0])?String(s[0]):"?") + " / " + esc(num(s[1])?String(s[1]):"?") + "</b>"
+          + (num(r.sk) && r.sk > 0 ? '<span style="color:var(--warn)">　另有 ' + esc(String(r.sk)) + ' 题未计分</span>' : "")
+          + "</div>";
+    if(r.p && typeof r.p === "object" && Object.keys(r.p).length){
       h += '<div class="note" style="margin-top:8px"><b>他当初的预测</b><br>';
       Object.keys(r.p).forEach(function(k){
         var q = T.quantities.filter(function(x){return x.k===k;})[0] || {label:k, unit:""};
-        h += q.label + "：" + fmt(r.p[k],2) + " " + q.unit + "<br>";
+        h += esc(q.label) + "：" + fmt(parseFloat(r.p[k]),2) + " " + esc(q.unit) + "<br>";
       });
       h += "</div>";
     }
@@ -1178,8 +1391,7 @@ function openFromHash(){
   var hash = location.hash || "";
   if(hash.indexOf("#lab=") !== 0) return;
   try{ switchTab("s"); openLab(dec(hash)); }
-  catch(e){ switchTab("s"); $("sWrap").style.display = "none"; $("loadBox").style.display = "";
-            $("loadHint").textContent = "链接里的实验码读不出来。"; }
+  catch(e){ failLoad("链接里的实验码读不出来（" + e.message + "）。"); }
 }
 openFromHash();
 /* 已经开着页面时换 hash 是同文档跳转，脚本不会重跑，得自己听 */

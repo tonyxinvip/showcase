@@ -64,8 +64,10 @@ check_page() {
 
   # 5. 外部请求 —— 公开页面不许连出去（data: 与相对路径放行）
   local ext
-  ext=$(grep -oE '(src|href)="https?://[^"]+"' "$f" \
-        | grep -vE 'https?://(www\.)?(manim\.community|github\.com)' | head -3)
+  # 协议相对 URL（//host/x.js）在 https 站点上会真的发出去，而且是从 CDN 片段
+  # 复制来最常见的形态。只认 https?:// 时这一整类写法全部放行。2026-08-09 补。
+  ext=$(grep -oiE '(src|srcset)\s*=\s*"?(https?:)?//[^" >]+|<link[^>]+href\s*=\s*"?(https?:)?//[^" >]+|@import[^;]*(https?:)?//[^;]+|url\(\s*"?(https?:)?//[^)]+' "$f" \
+        | grep -vE '(https?:)?//(www\.)?(manim\.community|github\.com)' | head -3)
   if [ -n "$ext" ]; then
     printf '      %s\n' "$ext"
     bad "有指向外部的 src/href（页面应自包含）"
