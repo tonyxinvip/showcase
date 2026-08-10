@@ -117,6 +117,7 @@ footer.bottom .pubdate{margin-top:3px;font-size:13px;color:var(--ink-3)}
       <span class="badge done">判分由规则引擎完成，不经过大模型</span>
       <span class="badge todo">键角读数题只对「答案能在模型上量到」的分子开放。孤对压缩后的实测角，理想构型上量不出来，签核也不放行</span>
       <span class="badge todo">误解陷阱的效度未经验证，目前只做到人工过目</span>
+      <span class="badge todo">「孤对把键角压小」这条规则只对孤对不对称分布的分子成立。XeF₄ / XeF₂ 的孤对对称抵消，键角仍等于理想值——方向逐分子从数据表比对推出，推不出来的分子不出这道题</span>
       <span class="badge todo">默认视角下中心原子的标签会被前方原子挡住，拖动旋转可看清</span>
     </div>
   </div>
@@ -168,8 +169,8 @@ footer.bottom .pubdate{margin-top:3px;font-size:13px;color:var(--ink-3)}
 <div class="howto">
   <h2>这一页在演示什么</h2>
   <ul>
-    <li><b>操作真实对象，不是做选择题。</b>搭建题里学生自己决定放几个配体、几个孤对，构型按规则实时重排；读键角那一题是在模型上点两个原子量出来的。</li>
-    <li><b>每一次操作当场判分。</b>右侧逐目标进度实时更新，每个动作产出一条 xAPI 证据。答错时系统会指出这是哪一种误解，而不是只说「不对」。<br><span style="color:var(--ink-3);font-size:13px">选择题蒙对一次只记「暂定达成」——三选一的题蒙中概率 1/3，一次做对不足以说明掌握。要么两道选择题都对，要么有一道自己搭出来的题做对。</span></li>
+    <li><b>操作真实对象，不是做选择题。</b>搭建题里学生自己决定放几个配体、几个孤对，构型按规则实时重排；读键角那一题是在模型上点两个原子量出来的。<br><span style="color:var(--ink-3);font-size:13px">量出来的那个值由模型坐标算得，学生点哪两个原子都落在可接受范围里——所以这一题练的是「会用测量工具、知道该量哪里」，它不参与「已达成」的判定。</span></li>
+    <li><b>每一次操作当场判分。</b>右侧逐目标进度实时更新，每个动作产出一条 xAPI 证据。答错时系统会指出这是哪一种误解，而不是只说「不对」。<br><span style="color:var(--ink-3);font-size:13px">「已达成」的门槛是一句能对着数据核的话：一个什么都不会的学生蒙到它的概率必须低于 5%。每道题按它自己的选项数折算蒙中概率，通过的题连乘。三道四选一的命名题连乘是 1.6%，够；两道是 6.3%，只记「暂定达成」。在界面上量出来的读数题概率是 1——它答不错，所以一条证据都不提供。</span></li>
     <li><b>判分不经过大模型。</b>分子几何、键角、干扰项、误解识别全部由价层电子对互斥的规则推出。最强的那个干扰项就是该分子的电子对几何名——它本来就在规则表里，不需要生成。</li>
     <li><b>教学层的文案要过闸才能上。</b>题干与提示不允许出现答案名；写出的数字如果等于本题答案，会被拦下；一份内容里前面的提示不许说出后面题目的答案。任一条不过，整份内容拒收。<br><span style="color:var(--ink-3);font-size:13px">这道闸做的是字面比对，不是语义判断——三级提示的最后一级按设计就该把人引到答案跟前，它拦的是「把答案说出来」，不是「让人推得出来」。数字这一条也按语境区分：「键角是 90 度」拦，「把模型旋转 90 度」放行。</span></li>
   </ul>
@@ -239,6 +240,36 @@ window.__EMBEDDED_SPEC = {
       ]
     },
     {
+      "type": "name_geometry",
+      "moleculeId": "H2O",
+      "prompt": "水分子的分子几何是什么形状？",
+      "hints": [
+        "中心氧原子的价层里，成键的方向和没成键的方向要一起数。",
+        "电子对几何是四面体，但只有两个方向上挂着原子。",
+        "把两个没挂原子的方向划掉，只看两根 O—H 相对氧原子怎么张开。"
+      ]
+    },
+    {
+      "type": "compression_direction",
+      "moleculeId": "H2O",
+      "prompt": "与理想的四面体键角相比，水分子实际的 H—O—H 键角偏向哪一侧？",
+      "hints": [
+        "中心氧原子上没成键的电子云比成键的那两团更靠近氧本身。",
+        "水的中心原子上这样的电子云有两团，氨只有一团。",
+        "把水、氨、甲烷三个分子的键角排成一列比一比。"
+      ]
+    },
+    {
+      "type": "compression_direction",
+      "moleculeId": "XeF4",
+      "prompt": "四氟化氙的中心原子上有孤对。与理想的正八面体键角相比，实际的 F—Xe—F 键角偏向哪一侧？",
+      "hints": [
+        "先看这两团没成键的电子云停在哪两个方向上。",
+        "它们停在正相反的两个方向，对每一根 Xe—F 的推挤是一样大的。",
+        "两边推挤一样大时，被推的那根键不会往任何一侧偏。"
+      ]
+    },
+    {
       "type": "read_angle",
       "moleculeId": "CH4",
       "prompt": "在模型上读出甲烷的 H—C—H 键角。",
@@ -268,8 +299,11 @@ const ELEMENT_RADIUS = {
 const colorOf = (el) => ELEMENT_COLOR[el] ?? ELEMENT_COLOR.default;
 const radiusOf = (el) => ELEMENT_RADIUS[el] ?? ELEMENT_RADIUS.default;
 
-const centralSphereRadius = (el) => radiusOf(el) * 1.15;
-const lonePairDistance = (el) => centralSphereRadius(el) + 0.26;
+const CENTRAL_RADIUS_FACTOR = 1.15;
+const LONE_PAIR_CLEARANCE = 0.26;
+
+const centralSphereRadius = (el) => radiusOf(el) * CENTRAL_RADIUS_FACTOR;
+const lonePairDistance = (el) => centralSphereRadius(el) + LONE_PAIR_CLEARANCE;
 
 function rotate([x, y, z], yaw, pitch) {
   const cy = Math.cos(yaw), sy = Math.sin(yaw);
@@ -381,7 +415,7 @@ class MoleculeView {
       items.push({ kind: 'atom', el: ligand, p, z: p[2], idx: i });
     });
     if (this.showLonePairs) {
-      const lpDist = this.lonePairDistanceOverride ?? (radiusOf(central) * 1.15 + 0.26);
+      const lpDist = this.lonePairDistanceOverride ?? lonePairDistance(central);
       for (const dir of lonePairs) {
         const p = rotate(dir, this.yaw, this.pitch).map((c) => c * lpDist);
         items.push({ kind: 'lone', p, z: p[2] });
@@ -414,7 +448,7 @@ class MoleculeView {
       }
 
       if (it.kind === 'lone') {
-        const r = scale * 0.32 * ds;
+        const r = scale * 0.32 * ds * (this.lonePairRadiusScale ?? 1);
         const g = ctx.createRadialGradient(sx, sy, r * 0.1, sx, sy, r);
         g.addColorStop(0, 'rgba(150,200,255,0.92)');
         g.addColorStop(0.55, 'rgba(110,165,245,0.55)');
@@ -426,7 +460,7 @@ class MoleculeView {
         continue;
       }
 
-      const r = scale * radiusOf(it.el) * (it.isCentral ? 1.15 : this.ligandRadiusScale) * ds;
+      const r = scale * radiusOf(it.el)
       if (it.idx !== undefined && this.selection?.has(it.idx)) {
         ctx.strokeStyle = '#ffd166';
         ctx.lineWidth = 3;
@@ -468,6 +502,15 @@ class MoleculeView {
       }
     });
     return best;
+  }
+
+  projectForTest(dir) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = this.canvas.width / dpr;
+    const h = this.canvas.height / dpr;
+    const p = rotate(dir, this.yaw, this.pitch);
+    const scale = Math.min(w, h) * 0.30;
+    return [w / 2 + p[0] * scale, h / 2 - p[1] * scale];
   }
 
   setSelection(indices) {
@@ -604,12 +647,31 @@ const PLACEHOLDER_SIGNATURES = [
   '待补', '待定', '未定', '待签', '签核中', '教研', 'reviewer', 'admin',
 ];
 
+const PLACEHOLDER_SHAPES = [
+  /^(.)\1*$/,
+  /^[\s.\-_·]*$/,
+];
+
+function looksLikePlaceholder(raw) {
+  const s = raw.trim().toLowerCase();
+  if (PLACEHOLDER_SIGNATURES.includes(s)) return true;
+  if (PLACEHOLDER_SHAPES.some((re) => re.test(s))) return true;
+  const stripped = s.replace(/[\s.\-_·、,，]/g, '');
+  if (stripped !== s && PLACEHOLDER_SIGNATURES.includes(stripped)) return true;
+  if (new Set(stripped).size <= 1) return true;
+  if (/^(暂无|未知|不详|无|没有|待|未)/.test(s)) return true;
+  if (/^(测试|试验|样例|示例|例子|demo|sample|dummy|foo|bar)/.test(s)) return true;
+  return false;
+}
+
+const SIGNATURE_EPOCH = '2000-01-01';
+
 function isValidSignature(sig) {
   if (sig === null || typeof sig !== 'object' || Array.isArray(sig)) return false;
   const { by, date, source } = sig;
   const clean = (x) => x.replace(/[\s\u200b-\u200f\u2060\ufeff\u3000]/g, '');
   if (typeof by !== 'string' || clean(by).length < 2) return false;
-  if (PLACEHOLDER_SIGNATURES.includes(clean(by).toLowerCase())) return false;
+  if (looksLikePlaceholder(clean(by))) return false;
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   const parsed = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return false;
@@ -617,8 +679,9 @@ function isValidSignature(sig) {
   const now = new Date();
   const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   if (date > todayLocal) return false;
+  if (date < SIGNATURE_EPOCH) return false;
   if (typeof source !== 'string' || clean(source).length < 4) return false;
-  if (PLACEHOLDER_SIGNATURES.includes(clean(source).toLowerCase())) return false;
+  if (looksLikePlaceholder(clean(source))) return false;
   return true;
 }
 
@@ -661,6 +724,22 @@ const MOLECULAR_GEOMETRY = {
   '5_1': { key: 'square_pyramidal', zh: '四方锥形', notation: 'AX5E' },
   '4_2': { key: 'square_planar', zh: '平面四方形', notation: 'AX4E2' },
 };
+
+const GEOMETRY_ALIASES = {
+  linear: ['直线形', '直线型', '直线', '线形'],
+  trigonal_planar: ['平面三角形', '平面三角', '三角形'],
+  bent: ['角形', 'V形', 'v形', '弯曲形', '弯曲型', '折线形'],
+  tetrahedral: ['四面体形', '四面体', '正四面体'],
+  trigonal_pyramidal: ['三角锥形', '三角锥', '角锥形'],
+  trigonal_bipyramidal: ['三角双锥形', '三角双锥'],
+  seesaw: ['变形四面体形', '变形四面体', '跷跷板形', '跷跷板型', '跷跷板'],
+  t_shaped: ['T形', 't形', 'T型'],
+  octahedral: ['正八面体形', '正八面体', '八面体'],
+  square_pyramidal: ['四方锥形', '四方锥', '四角锥形'],
+  square_planar: ['平面四方形', '平面四方', '平面正方形', '正方形', '四方形'],
+};
+
+const NON_GEOMETRY_TERMS = ['键角', '夹角', '角度', '转角'];
 
 class VseprError extends Error {
   constructor(code, message) {
@@ -850,7 +929,8 @@ const OBJECTIVES = [
   {
     id: 'OBJ-3',
     zh: '读出键角，并判断孤对把它压向哪一侧',
-    detail: '孤对斥力大于成键电子对，把键角压到理想值以下；无孤对时键角等于理想值',
+    detail: '孤对斥力大于成键电子对，把它旁边的键角压到理想值以下；'
+      + '孤对若对称分布（XeF₄ 的反位孤对、XeF₂ 的赤道孤对），键角仍等于理想值',
   },
 ];
 
@@ -881,47 +961,143 @@ const ANGLE_TOLERANCE_CAP_DEG = 2.5;
 const ANGLE_TOLERANCE_FLOOR_DEG = 0.2;
 
 const MEASURABLE_EPS_DEG = 0.6;
+const MODEL_MATCH_EPS_DEG = 0.1;
+
+const IDEAL_LIGAND_ANGLES = {
+  '2_0': [180],            // 直线
+  '2_1': [120],            // 角形（源自平面三角）
+  '2_2': [109.5],          // 角形（源自四面体）
+  '2_3': [180],            // 直线（源自三角双锥，配体占两个轴向位）
+  '3_0': [120],            // 平面三角
+  '3_1': [109.5],          // 三角锥
+  '3_2': [90, 180],        // T 形
+  '4_0': [109.5],          // 四面体
+  '4_1': [90, 120, 180],   // 变形四面体
+  '4_2': [90, 180],        // 平面四方
+  '5_0': [90, 120, 180],   // 三角双锥
+  '5_1': [90, 180],        // 四方锥（八面体去掉一个轴向位）
+  '6_0': [90, 180],        // 正八面体
+};
 
 function modelAngles(entryId) {
   const { derived } = truthFor(entryId);
   return ligandAngles(layout(derived.ligandCount, derived.lonePairs).ligands);
 }
 
+function idealLigandAngles(entryId) {
+  const { derived } = truthFor(entryId);
+  const key = `${derived.ligandCount}_${derived.lonePairs}`;
+  const ref = IDEAL_LIGAND_ANGLES[key];
+  if (!ref) throw new Error(`AX${derived.ligandCount}E${derived.lonePairs} 不在理想键角参照表内`);
+  return [...ref];
+}
+
+function modelMatchesIdeal(entryId) {
+  let ref;
+  try { ref = idealLigandAngles(entryId); } catch { return false; }
+  const model = modelAngles(entryId);
+  if (model.length !== ref.length) return false;
+  return ref.every((a, i) => Math.abs(model[i] - a) <= MODEL_MATCH_EPS_DEG);
+}
+
 function angleAnswersMeasurable(entryId) {
   const { entry } = truthFor(entryId);
   const observed = entry.observedAngles ?? [];
   if (observed.length === 0) return false;
-  const model = modelAngles(entryId);
-  return observed.every((o) => model.some((m) => Math.abs(m - o.deg) <= MEASURABLE_EPS_DEG));
+  let ideal;
+  try { ideal = idealLigandAngles(entryId); } catch { return false; }
+  return observed.every((o) => ideal.some((m) => Math.abs(m - o.deg) <= MEASURABLE_EPS_DEG));
 }
 
 function acceptableAngles(entryId) {
   const { entry } = truthFor(entryId);
   const observed = (entry.observedAngles ?? []).map((a) => a.deg);
-  if (angleAnswersMeasurable(entryId)) return modelAngles(entryId);
+  if (angleAnswersMeasurable(entryId)) return idealLigandAngles(entryId);
   return observed;
 }
 
-function angleTolerance(entryId) {
+function distractorAngles(entryId) {
   const { derived } = truthFor(entryId);
-  const pts = [...acceptableAngles(entryId)];
-  if (derived.lonePairs > 0) {
-    for (const d of derived.idealAngles) {
-      if (!pts.some((x) => Math.abs(x - d) < 0.01)) pts.push(d);
-    }
+  const pts = [...derived.idealAngles];
+  try { for (const a of modelAngles(entryId)) pts.push(a); } catch { /* 坐标表坏了 */ }
+  for (const e of CATALOG) {
+    for (const a of e.observedAngles ?? []) pts.push(a.deg);
   }
-  pts.sort((a, b) => a - b);
+  return pts;
+}
+
+function angleTolerance(entryId) {
+  const acceptable = acceptableAngles(entryId);
+  if (acceptable.length === 0) return ANGLE_TOLERANCE_CAP_DEG;
+  const isAnswer = (x) => acceptable.some((a) => Math.abs(a - x) < 0.01);
+  const distractors = distractorAngles(entryId).filter((d) => !isAnswer(d));
   let minSep = Infinity;
-  for (let i = 1; i < pts.length; i += 1) minSep = Math.min(minSep, pts[i] - pts[i - 1]);
+  for (const a of acceptable) {
+    for (const d of distractors) minSep = Math.min(minSep, Math.abs(a - d));
+  }
   if (!Number.isFinite(minSep)) return ANGLE_TOLERANCE_CAP_DEG;
   return Math.min(ANGLE_TOLERANCE_CAP_DEG,
     Math.max(ANGLE_TOLERANCE_FLOOR_DEG, minSep / 3));
+}
+
+function compressionDirection(entryId) {
+  const { entry } = truthFor(entryId);
+  const observed = entry.observedAngles ?? [];
+  if (observed.length === 0) return null;
+  let ideal;
+  try { ideal = idealLigandAngles(entryId); } catch { return null; }
+  if (ideal.length === 0) return null;
+
+  let anyBelow = false;
+  for (const o of observed) {
+    const nearest = ideal.reduce((best, m) => (
+      Math.abs(m - o.deg) < Math.abs(best - o.deg) ? m : best), ideal[0]);
+    const diff = o.deg - nearest;
+    if (diff > MEASURABLE_EPS_DEG) return null;
+    if (diff < -MEASURABLE_EPS_DEG) anyBelow = true;
+  }
+  return anyBelow ? 'below_ideal' : 'equal_ideal';
 }
 
 function truthFor(entryId) {
   const entry = getEntry(entryId);
   if (!entry) throw new Error(`分子 ${entryId} 不在常数表内`);
   return { entry, derived: deriveGeometry(entry.formula) };
+}
+
+
+const MAX_DOMAINS_PER_SIDE = 6;
+
+const COMPRESSION_OPTIONS = [
+  { key: 'below_ideal', zh: '小于理想键角' },
+  { key: 'equal_ideal', zh: '等于理想键角' },
+  { key: 'above_ideal', zh: '大于理想键角' },
+];
+
+function geometryOptions(derived) {
+  const correct = derived.molecularGeometry;
+  const keys = new Set([correct.key]);
+  const options = [{ key: correct.key, zh: correct.zh }];
+
+  if (derived.epgDiffersFromMg && !keys.has(derived.electronPairGeometry.key)) {
+    keys.add(derived.electronPairGeometry.key);
+    options.push({ key: derived.electronPairGeometry.key, zh: derived.electronPairGeometry.zh });
+  }
+  for (let e = 0; e <= 3 && options.length < 4; e += 1) {
+    const cand = MOLECULAR_GEOMETRY[`${derived.ligandCount}_${e}`];
+    if (cand && !keys.has(cand.key)) {
+      keys.add(cand.key);
+      options.push({ key: cand.key, zh: cand.zh });
+    }
+  }
+  for (const cand of Object.values(MOLECULAR_GEOMETRY)) {
+    if (options.length >= 4) break;
+    if (!keys.has(cand.key)) {
+      keys.add(cand.key);
+      options.push({ key: cand.key, zh: cand.zh });
+    }
+  }
+  return options;
 }
 
 function gradeDomainBuild(entryId, studentLigands, studentLonePairs) {
@@ -934,7 +1110,7 @@ function gradeDomainBuild(entryId, studentLigands, studentLonePairs) {
   if (!passed) {
     if (studentLigands === correctX && studentLonePairs === 0 && correctE > 0) {
       misconception = MISCONCEPTIONS.LONE_PAIR_IGNORED;
-    } else if (studentLigands === derived.stericNumber && correctE > 0) {
+    } else if (studentLigands === derived.stericNumber && studentLonePairs === 0 && correctE > 0) {
       misconception = MISCONCEPTIONS.LONE_PAIR_AS_LIGAND;
     }
   }
@@ -943,7 +1119,7 @@ function gradeDomainBuild(entryId, studentLigands, studentLonePairs) {
     objectiveId: 'OBJ-1',
     itemId: `${entryId}:build_domains`,
     passed,
-    guessable: false,
+    guessProbability: 1 / ((MAX_DOMAINS_PER_SIDE + 1) ** 2),
     expected: { ligands: correctX, lonePairs: correctE, stericNumber: derived.stericNumber },
     actual: { ligands: studentLigands, lonePairs: studentLonePairs },
     misconception,
@@ -964,7 +1140,7 @@ function gradeGeometryName(entryId, answerKey) {
     objectiveId: 'OBJ-2',
     itemId: `${entryId}:name_geometry`,
     passed,
-    guessable: true,
+    guessProbability: 1 / geometryOptions(derived).length,
     expected: derived.molecularGeometry.key,
     actual: answerKey,
     misconception,
@@ -983,10 +1159,22 @@ function gradeAngle(entryId, answerDeg) {
     };
   }
 
+  if (!modelMatchesIdeal(entryId)) {
+    return {
+      objectiveId: 'OBJ-3',
+      passed: null,
+      skipped: true,
+      reason: 'MODEL_ANGLES_OFF_REFERENCE',
+      detail: `${entry.display} 的模型键角与参照表不一致，本关不判读数`,
+    };
+  }
+
   if (typeof answerDeg !== 'number' || !Number.isFinite(answerDeg)) {
     return {
       objectiveId: 'OBJ-3',
+      itemId: `${entryId}:read_angle`,
       passed: false,
+      guessProbability: 1,
       expected: { anyOf: acceptableAngles(entryId) },
       actual: answerDeg,
       misconception: null,
@@ -1012,7 +1200,7 @@ function gradeAngle(entryId, answerDeg) {
     objectiveId: 'OBJ-3',
     itemId: `${entryId}:read_angle`,
     passed,
-    guessable: true,
+    guessProbability: 1,
     expected: { anyOf: acceptable, tolerance },
     actual: answerDeg,
     misconception,
@@ -1020,37 +1208,65 @@ function gradeAngle(entryId, answerDeg) {
 }
 
 function gradeCompressionDirection(entryId, answer) {
-  const { derived } = truthFor(entryId);
-  const expected = derived.lonePairs > 0 ? 'below_ideal' : 'equal_ideal';
+  const { entry } = truthFor(entryId);
+  const expected = compressionDirection(entryId);
+  if (expected === null) {
+    return {
+      objectiveId: 'OBJ-3',
+      passed: null,
+      skipped: true,
+      reason: 'COMPRESSION_DIRECTION_UNDETERMINED',
+      detail: `${entry.display} 缺少可比对的键角数据，无法确定压缩方向，本关不判`,
+    };
+  }
+  const passed = answer === expected;
+  const misconception = (!passed && expected === 'below_ideal' && answer === 'equal_ideal')
+    ? MISCONCEPTIONS.IDEAL_ANGLE_ASSUMED
+    : null;
   return {
     objectiveId: 'OBJ-3',
     itemId: `${entryId}:compression_direction`,
-    passed: answer === expected,
-    guessable: true,
+    passed,
+    guessProbability: 1 / COMPRESSION_OPTIONS.length,
     expected,
     actual: answer,
-    misconception: null,
+    misconception,
   };
 }
+
+function guessProbabilityOf(result) {
+  const p = result.guessProbability;
+  if (typeof p !== 'number' || !Number.isFinite(p)) return 1;
+  return Math.min(1, Math.max(0, p));
+}
+
+const GUESS_ALPHA = 0.05;
 
 function summarize(results) {
   return OBJECTIVES.map((obj) => {
     const hits = results.filter((r) => r.objectiveId === obj.id && !r.skipped);
     const attempted = hits.length;
     const passed = hits.filter((r) => r.passed === true).length;
-    const latestPassed = hits.length > 0 && hits[hits.length - 1].passed === true;
+    const failable = hits.filter((r) => guessProbabilityOf(r) < 1);
+    const tail = failable.length > 0 ? failable : hits;
+    const latestPassed = tail.length > 0 && tail[tail.length - 1].passed === true;
 
-    const passedHits = hits.filter((r) => r.passed === true);
-    const hasUnguessableEvidence = passedHits.some((r) => r.guessable === false);
-    const guessablePassed = passedHits.filter((r) => r.guessable !== false);
-    const guessableItems = new Set(guessablePassed.map((r, i) => r.itemId ?? `anon-${i}`));
-    const guessableAnswers = new Set(guessablePassed.map((r) => JSON.stringify(r.expected)));
-    const enoughGuessable = guessableItems.size >= 2 && guessableAnswers.size >= 2;
+    const byItem = new Map();
+    for (const r of hits) {
+      if (r.passed !== true || typeof r.itemId !== 'string') continue;
+      if (!byItem.has(r.itemId)) byItem.set(r.itemId, r);
+    }
+    const evidence = [...byItem.values()];
+
+    const luck = evidence.reduce((acc, r) => acc * guessProbabilityOf(r), 1);
+    const answers = new Set(evidence.map((r) => JSON.stringify(r.expected)));
+    const discriminating = answers.size >= 2
+      || evidence.some((r) => guessProbabilityOf(r) <= GUESS_ALPHA);
 
     let state = 'not_started';
     if (attempted > 0) {
       if (passed !== attempted) state = latestPassed ? 'recovered' : 'in_progress';
-      else if (hasUnguessableEvidence || enoughGuessable) state = 'met';
+      else if (luck <= GUESS_ALPHA && discriminating) state = 'met';
       else state = 'met_provisional';
     }
     return {
@@ -1058,6 +1274,8 @@ function summarize(results) {
       attempted,
       passed,
       state,
+      evidenceCount: evidence.length,
+      luck,
       misconceptions: [...new Set(hits.filter((r) => r.misconception)
         .map((r) => r.misconception.id))],
     };
@@ -1156,11 +1374,27 @@ function numbersIn(text) {
   return [...nums, ...chineseNumeralValues(norm)];
 }
 
-const KW = '孤对|电子域|配体|成键电子对';
-const NUM = '[0-9０-９零一二两三四五六七八九十]';
-const DOMAIN_COUNT_PATTERN = new RegExp(
-  `(?:(?:${KW})\\s*(?:的)?(?:数|总数|数目)?\\s*(?:是|为|=|有|共)\\s*${NUM})`
-  + `|(?:${NUM}\\s*(?:个|对|组)\\s*(?:${KW}))`);
+const KW = '孤对|电子域|配体|成键电子对|价层电子对';
+const QUANT = '个|对|组|双';
+const NUMTOKEN = '[0-9]+(?:\\.[0-9]+)?|[零一二两三四五六七八九十百]+';
+const COUNT_FORMS = [
+  new RegExp(`(${NUMTOKEN})\\s*(?:${QUANT})\\s*(?:${KW})`, 'g'),
+  new RegExp(`(?:${KW})\\s*(?:原子|电子)?\\s*(?:的)?\\s*(?:数量|个数|总数|数目|数)?\\s*(?:是|为|有|共|等于|:|：|=)?\\s*(${NUMTOKEN})`, 'g'),
+  new RegExp(`(${NUMTOKEN})\\s*(?:对|双)\\s*电子(?!域)`, 'g'),
+];
+
+function countClaims(text) {
+  const norm = normalizeDigits(text);
+  const out = [];
+  for (const re of COUNT_FORMS) {
+    for (const m of norm.matchAll(re)) {
+      const raw = m[1];
+      const val = /^[0-9]/.test(raw) ? Number(raw) : (chineseNumeralValues(raw)[0] ?? null);
+      if (val !== null && Number.isFinite(val)) out.push({ value: val, text: m[0] });
+    }
+  }
+  return out;
+}
 
 const HINT_LEVELS = 3;
 const MAX_SPEC_DEPTH = 12;
@@ -1178,7 +1412,9 @@ class Violation {
 
 function checkKeys(node, allowed, path, gate, out) {
   if (node === null || typeof node !== 'object' || Array.isArray(node)) return;
-  for (const key of Object.keys(node)) {
+  const keys = new Set(Object.keys(node));
+  for (const k in node) keys.add(k);
+  for (const key of keys) {
     if (!allowed.includes(key)) {
       out.push(new Violation(gate, `${path}.${key}`,
         `规格不允许出现字段 ${JSON.stringify(key)}；` +
@@ -1226,67 +1462,101 @@ function textLeaks(text, taskType, derived, entry, strict = true) {
     }
   }
 
-  if (strict && taskType === 'build_domains'
-      && DOMAIN_COUNT_PATTERN.test(normalizeDigits(text))) {
+  if (strict && taskType === 'build_domains') {
     const counts = new Set([derived.lonePairs, derived.ligandCount, derived.stericNumber]);
-    if (numbersIn(text).some((n) => counts.has(n))) {
-      leaks.push('把电子域计数写在文案里');
+    for (const c of countClaims(text)) {
+      if (counts.has(c.value)) leaks.push(`${c.text}（把电子域计数写在文案里）`);
     }
   }
   return leaks;
 }
 
+const GEOMETRY_VOCAB = (() => {
+  const terms = new Set(NON_GEOMETRY_TERMS);
+  for (const list of Object.values(GEOMETRY_ALIASES)) for (const t of list) terms.add(t);
+  return [...terms].map(normalizeName).sort((a, b) => b.length - a.length);
+})();
+
+function normalizeName(s) {
+  return s.replace(/[\s​-‏⁠﻿　_]/g, '').toLowerCase();
+}
+
+function mentionedGeometryTerms(text) {
+  const norm = normalizeName(text);
+  const found = new Set();
+  let i = 0;
+  while (i < norm.length) {
+    const hit = GEOMETRY_VOCAB.find((t) => t.length > 0 && norm.startsWith(t, i));
+    if (hit) { found.add(hit); i += hit.length; } else { i += 1; }
+  }
+  return found;
+}
+
 function answerNeedles(taskType, derived, entry) {
   switch (taskType) {
-    case 'name_geometry': {
-      const zh = derived.molecularGeometry.zh;
+    case 'name_geometry':
       return [
-        zh,
-        (zh.endsWith('形') && zh.length >= 3) ? zh.slice(0, -1) : null,
+        ...(GEOMETRY_ALIASES[derived.molecularGeometry.key] ?? []),
+        derived.molecularGeometry.zh,
         derived.molecularGeometry.notation,
         derived.molecularGeometry.key,
       ];
-    }
     case 'read_angle':
       return [];
-    case 'compression_direction':
-      return derived.lonePairs > 0 ? ['小于理想', '压缩'] : ['等于理想'];
+    case 'compression_direction': {
+      const dir = compressionDirection(entry.id);
+      if (dir === 'below_ideal') return ['小于理想', '压缩', '比理想值小', '比理想小'];
+      if (dir === 'equal_ideal') return ['等于理想', '与理想值相同', '仍是理想'];
+      return [];
+    }
     case 'build_domains':
-      return [
-        `${derived.lonePairs} 对孤对`, `孤对 ${derived.lonePairs}`,
-        `${derived.ligandCount} 个配体`, `配体 ${derived.ligandCount}`,
-        `${derived.stericNumber} 个电子域`, `电子域 ${derived.stericNumber}`,
-      ];
+      return [];
     default:
       return [];
   }
 }
 
 function hintLeaksAnswer(hintText, taskType, derived, entry) {
-  return answerNeedles(taskType, derived, entry).filter((n) => n && hintText.includes(n));
-}
-
-const NON_ANGLE_UNIT = /^\s*(秒|分钟|分|小时|天|号|题|次|页|族|周期|个|人|%|％)/;
-function numbersWithUnit(clause) {
-  const norm = normalizeDigits(clause);
+  const needles = [...new Set(answerNeedles(taskType, derived, entry).filter(Boolean))];
+  if (needles.length === 0) return [];
+  const norm = normalizeName(hintText);
+  const mentioned = taskType === 'name_geometry' ? mentionedGeometryTerms(hintText) : null;
   const out = [];
-  for (const m of norm.matchAll(/\d+(?:\.\d+)?/g)) {
-    out.push({ value: Number(m[0]), after: norm.slice(m.index + m[0].length) });
-  }
-  for (const c of chineseNumerals(norm)) {
-    out.push({ value: c.value, after: norm.slice(c.index + c.length) });
+  for (const n of needles) {
+    if (!n) continue;
+    const t = normalizeName(n);
+    const hit = (mentioned && mentioned.has(t)) || (!mentioned && norm.includes(t))
+      || (mentioned && !GEOMETRY_VOCAB.includes(t) && norm.includes(t));
+    if (hit) out.push(n);
   }
   return out;
 }
 
+const NON_ANGLE_UNIT = /^\s*(秒|分钟|分|小时|天|号|题|次|页|族|周期|个|人|%|％)/;
+const ANGLE_UNIT = /^\s*(度|°|deg\b|degrees?\b)/i;
+function numbersWithUnit(clause) {
+  const norm = normalizeDigits(clause);
+  const out = [];
+  for (const m of norm.matchAll(/\d+(?:\.\d+)?/g)) {
+    out.push({ value: Number(m[0]), index: m.index, after: norm.slice(m.index + m[0].length) });
+  }
+  for (const c of chineseNumerals(norm)) {
+    out.push({ value: c.value, index: c.index, after: norm.slice(c.index + c.length) });
+  }
+  return out;
+}
+
+const ROTATE_LEAD = /(旋转|转动|转过|转到|绕[^，。；]{0,3}转|转)[^，。；]{0,3}$/;
+function isRotationAmount(clause, num) {
+  return ROTATE_LEAD.test(normalizeDigits(clause).slice(0, num.index));
+}
+
 function claimsAngle(clause, num, taskType) {
   if (NON_ANGLE_UNIT.test(num.after)) return false;
-  const hasAngleWord = /键角|夹角|角度|角是/.test(clause);
-  const hasRotate = /旋转|转动|转过|转到/.test(clause);
-  if (hasRotate && !hasAngleWord) return false;
-  if (/^\s*(度|°)/.test(num.after)) return true;
-  if (hasAngleWord) return true;
-  return taskType === 'read_angle' && /量|读/.test(clause);
+  if (isRotationAmount(clause, num)) return false;
+  if (ANGLE_UNIT.test(num.after)) return true;
+  if (/键角|夹角|角度|角是/.test(clause)) return true;
+  return TASK_TYPES[taskType]?.objective === 'OBJ-3';
 }
 
 function checkSpec(spec) {
@@ -1345,7 +1615,8 @@ function checkSpec(spec) {
 
     checkKeys(task, ALLOWED_TASK_KEYS, p, 'GATE-2', v);
 
-    if (!Object.prototype.hasOwnProperty.call(TASK_TYPES, task.type)) {
+    if (typeof task.type !== 'string'
+        || !Object.prototype.hasOwnProperty.call(TASK_TYPES, task.type)) {
       v.push(new Violation('GATE-1', `${p}.type`,
         `未登记的任务类型 ${JSON.stringify(task.type)}；` +
         `已登记：${Object.keys(TASK_TYPES).join(' / ')}`));
@@ -1371,11 +1642,21 @@ function checkSpec(spec) {
       if (!isAngleTaskEligible(entry)) {
         v.push(new Violation('GATE-4', `${p}.type`,
           `${entry.display} 的键角未经签核或缺值，不得出读数任务`));
-      } else if (!angleAnswersMeasurable(entry.id)) {
+      }
+      if (!angleAnswersMeasurable(entry.id)) {
         v.push(new Violation('GATE-4', `${p}.type`,
           `${entry.display} 的实测键角在理想构型模型上量不出来，出读数题会变成必错题；`
           + `改用 compression_direction`));
       }
+      if (!modelMatchesIdeal(entry.id)) {
+        v.push(new Violation('GATE-4', `${p}.type`,
+          `${entry.display} 的模型键角与参照表不一致（坐标层有问题），不得出读数任务`));
+      }
+    }
+
+    if (task.type === 'compression_direction' && compressionDirection(entry.id) === null) {
+      v.push(new Violation('GATE-4', `${p}.type`,
+        `${entry.display} 缺少可比对的键角数据，压缩方向定不出来，不得出方向判断任务`));
     }
 
     const declared = task.objectiveId;
@@ -1422,23 +1703,28 @@ function checkSpec(spec) {
     .map((t, origIndex) => ({ t, origIndex }))
     .filter(({ t }) => t && typeof t === 'object' && TASK_TYPES[t.type] && getEntry(t.moleculeId));
   usable.forEach(({ t: task, origIndex: i }, ii) => {
-    const texts = [task.prompt, ...(Array.isArray(task.hints) ? task.hints : [])]
-      .filter((x) => typeof x === 'string');
+    const texts = [
+      ['prompt', task.prompt],
+      ...(Array.isArray(task.hints) ? task.hints.map((h, k) => [`hints[${k}]`, h]) : []),
+    ].filter(([, x]) => typeof x === 'string');
+    const reported = new Set();
     usable.forEach(({ t: other, origIndex: j }, jj) => {
       if (jj <= ii) return;
       const sameMolecule = other.moleculeId === task.moleculeId;
       const e = getEntry(other.moleculeId);
       let d;
       try { d = deriveGeometry(e.formula); } catch { return; }
-      for (const text of texts) {
+      for (const [where, text] of texts) {
         const leaks = sameMolecule
           ? textLeaks(text, other.type, d, e)
           : hintLeaksAnswer(text, other.type, d, e);   // 跨分子只查答案名
-        if (leaks.length > 0) {
-          v.push(new Violation('GATE-5', `$.tasks[${i}]`,
-            `文案泄露了第 ${j + 1} 题（${e.display} / ${other.type}）的答案：` +
-            `${leaks.map((x) => JSON.stringify(x)).join('、')}`));
-        }
+        if (leaks.length === 0) continue;
+        const key = `${where}|${j}|${leaks.join('|')}`;
+        if (reported.has(key)) continue;
+        reported.add(key);
+        v.push(new Violation('GATE-5', `$.tasks[${i}].${where}`,
+          `文案泄露了第 ${j + 1} 题（${e.display} / ${other.type}）的答案：` +
+          `${leaks.map((x) => JSON.stringify(x)).join('、')}`));
       }
     });
   });
@@ -1472,23 +1758,19 @@ function compileSpec(spec) {
       if (task.type === 'name_geometry') {
         return {
           ...base,
-          options: seededShuffle(buildGeometryOptions(derived), `${entry.id}:name`),
+          options: seededShuffle(geometryOptions(derived), `${entry.id}:name`),
         };
       }
       if (task.type === 'compression_direction') {
         return {
           ...base,
-          options: seededShuffle([
-            { key: 'below_ideal', zh: '小于理想键角' },
-            { key: 'equal_ideal', zh: '等于理想键角' },
-            { key: 'above_ideal', zh: '大于理想键角' },
-          ], `${entry.id}:compression`),
+          options: seededShuffle(COMPRESSION_OPTIONS, `${entry.id}:compression`),
         };
       }
       if (task.type === 'read_angle') {
         return { ...base, acceptableAngles: acceptableAngles(entry.id) };
       }
-      return { ...base, maxDomains: 6 };
+      return { ...base, maxDomains: MAX_DOMAINS_PER_SIDE };
     }),
   };
 }
@@ -1509,32 +1791,6 @@ function seededShuffle(items, seed) {
   return out;
 }
 
-function buildGeometryOptions(derived) {
-  const correct = derived.molecularGeometry;
-  const keys = new Set([correct.key]);
-  const options = [{ key: correct.key, zh: correct.zh }];
-
-  if (derived.epgDiffersFromMg && !keys.has(derived.electronPairGeometry.key)) {
-    keys.add(derived.electronPairGeometry.key);
-    options.push({ key: derived.electronPairGeometry.key, zh: derived.electronPairGeometry.zh });
-  }
-
-  for (let e = 0; e <= 3 && options.length < 4; e += 1) {
-    const cand = MOLECULAR_GEOMETRY[`${derived.ligandCount}_${e}`];
-    if (cand && !keys.has(cand.key)) {
-      keys.add(cand.key);
-      options.push({ key: cand.key, zh: cand.zh });
-    }
-  }
-  for (const cand of Object.values(MOLECULAR_GEOMETRY)) {
-    if (options.length >= 4) break;
-    if (!keys.has(cand.key)) {
-      keys.add(cand.key);
-      options.push({ key: cand.key, zh: cand.zh });
-    }
-  }
-  return options;
-}
 
 
 
@@ -1785,7 +2041,8 @@ function onHint() {
 function onNext() {
   if (state.index + 1 < state.compiled.tasks.length) loadTask(state.index + 1);
   else {
-    $('task-prompt').textContent = '六道题走完了。左侧是逐目标达成情况，下方是完整的证据链。';
+    $('task-prompt').textContent =
+      `${state.compiled.tasks.length} 道题走完了。左侧是逐目标达成情况，下方是完整的证据链。`;
     $('controls').innerHTML = '';
     $('btn-next').disabled = true;
   }
@@ -1799,10 +2056,13 @@ function renderObjectives() {
     row.className = `obj obj-${o.state}`;
     const mis = o.misconceptions.length
       ? `<span class="obj-mis">${o.misconceptions.length} 项误解</span>` : '';
+    const why = o.state === 'met_provisional'
+      ? `　全对，但纯靠蒙也有 ${(o.luck * 100).toFixed(1)}% 的概率全对，证据还不够`
+      : '';
     row.innerHTML = `
       <div class="obj-head"><span class="obj-id">${o.id}</span>${mis}</div>
       <div class="obj-zh">${o.zh}</div>
-      <div class="obj-meta">${o.attempted === 0 ? '未开始' : `${o.passed} / ${o.attempted} 通过`}</div>`;
+      <div class="obj-meta">${o.attempted === 0 ? '未开始' : `${o.passed} / ${o.attempted} 通过`}${why}</div>`;
     box.appendChild(row);
   }
 }
@@ -1825,7 +2085,9 @@ function stepper(label, get, set) {
   const val = document.createElement('span');
   val.className = 'stepper-value';
   val.textContent = get();
-  const inc = button('＋', 'step', () => { if (get() < 6) { set(get() + 1); val.textContent = get(); } });
+  const inc = button('＋', 'step', () => {
+    if (get() < MAX_DOMAINS_PER_SIDE) { set(get() + 1); val.textContent = get(); }
+  });
   el.append(dec, val, inc);
   return el;
 }

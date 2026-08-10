@@ -48,7 +48,10 @@ check_page() {
   #    里面就有 `password:!0`。2026-08-09 发 scope 时踩到。
   #    一个总是误报的闸门会被养成「看到红字就忽略」，那它就等于没有。
   #    改成要求引号包起来的 6 位以上值，真凭证仍然判死（已注入实测）。
-  if grep -qiE 'sk-[A-Za-z0-9]{16,}|(api[_-]?key|password|passwd|secret|token)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{6,}' "$f"; then
+  #    关键词前必须是**非标识符字符**。少了这一条，任何以这些词结尾的标识符
+  #    都会命中：`const NUMTOKEN = '[0-9]+...'` 里的 `TOKEN = '...'` 就被判成凭据。
+  #    2026-08-10 发化学 bench 时踩到 —— 与上面那条 React 误报是同一个形状。
+  if grep -qiE 'sk-[A-Za-z0-9]{16,}|(^|[^A-Za-z0-9_])(api[_-]?key|password|passwd|secret|token)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{6,}' "$f"; then
     bad "疑似密钥/凭据"
   else ok "无密钥命中"; fi
 
