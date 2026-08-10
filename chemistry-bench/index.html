@@ -22,6 +22,7 @@ header.top .wrap{padding-top:22px;padding-bottom:18px}
 h1{font-size:22px;margin:0 0 6px;font-weight:680;letter-spacing:-.01em}
 .tagline{color:var(--ink-2);font-size:14px;margin:0}
 .manifesto{margin:12px 0 0;color:var(--ink-3);font-size:13px}
+.manifesto-zh{display:inline-block;margin-top:3px;color:var(--ink-2)}
 .badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
 .badge{font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid;line-height:1.5}
 .badge.done{color:var(--good);background:var(--good-bg);border-color:#bfe0ca}
@@ -110,10 +111,11 @@ footer.bottom .pubdate{margin-top:3px;font-size:13px;color:var(--ink-3)}
   <div class="wrap">
     <h1 id="bench-title">价层电子对互斥：电子对几何与分子几何</h1>
     <p class="tagline">学生在三维模型上增删配体与孤对，构型按价层电子对互斥规则实时重排。判分走规则引擎，不经过大模型。</p>
-    <p class="manifesto">Manipulate a real figure · Graded as you go · Authored by AI, over fixed rules</p>
+    <p class="manifesto">Manipulate a real figure · Graded as you go · Authored by AI, over fixed rules<br>
+      <span class="manifesto-zh">先动手搭出来，再回答 · 每次操作当场判分 · AI 只写教学文案，判分交给固定规则</span></p>
     <div class="badges">
       <span class="badge done">判分由规则引擎完成，不经过大模型</span>
-      <span class="badge todo">键角读数题只对「由对称性决定角度」的分子开放：实验测定的键角未经教研签核，系统会拒绝出题</span>
+      <span class="badge todo">键角读数题只对「答案能在模型上量到」的分子开放。孤对压缩后的实测角，理想构型上量不出来，签核也不放行</span>
       <span class="badge todo">误解陷阱的效度未经验证，目前只做到人工过目</span>
       <span class="badge todo">默认视角下中心原子的标签会被前方原子挡住，拖动旋转可看清</span>
     </div>
@@ -126,7 +128,8 @@ footer.bottom .pubdate{margin-top:3px;font-size:13px;color:var(--ink-3)}
     <div class="panel">
       <h2>模型</h2>
       <canvas id="scene"></canvas>
-      <p class="scene-hint">拖动可旋转。蓝色云团是孤对电子，它占电子域但不是原子。</p>
+      <p class="scene-hint">拖动可旋转。蓝色云团是孤对电子，它占电子域但不是原子。<br>
+        「下一题」要先提交本题才会亮 —— 每一步都要留下判分记录，不能跳过。</p>
       <div id="build-readout"></div>
       <div id="controls"></div>
       <div class="row">
@@ -166,9 +169,9 @@ footer.bottom .pubdate{margin-top:3px;font-size:13px;color:var(--ink-3)}
   <h2>这一页在演示什么</h2>
   <ul>
     <li><b>操作真实对象，不是做选择题。</b>搭建题里学生自己决定放几个配体、几个孤对，构型按规则实时重排；读键角那一题是在模型上点两个原子量出来的。</li>
-    <li><b>每一次操作当场判分。</b>右侧逐目标进度实时更新，每个动作产出一条 xAPI 证据。答错时系统会指出这是哪一种误解，而不是只说「不对」。</li>
+    <li><b>每一次操作当场判分。</b>右侧逐目标进度实时更新，每个动作产出一条 xAPI 证据。答错时系统会指出这是哪一种误解，而不是只说「不对」。<br><span style="color:var(--ink-3);font-size:13px">选择题蒙对一次只记「暂定达成」——三选一的题蒙中概率 1/3，一次做对不足以说明掌握。要么两道选择题都对，要么有一道自己搭出来的题做对。</span></li>
     <li><b>判分不经过大模型。</b>分子几何、键角、干扰项、误解识别全部由价层电子对互斥的规则推出。最强的那个干扰项就是该分子的电子对几何名——它本来就在规则表里，不需要生成。</li>
-    <li><b>教学层的文案要过闸才能上。</b>题干与提示不允许出现答案名，也不允许出现「答出来会被判对」的数字；一份内容里前面的提示不许说出后面题目的答案。任一条不过，整份内容拒收。<br><span style="color:var(--ink-3);font-size:13px">这道闸做的是字面比对，不是语义判断——三级提示的最后一级按设计就该把人引到答案跟前，它拦的是「把答案说出来」，不是「让人推得出来」。</span></li>
+    <li><b>教学层的文案要过闸才能上。</b>题干与提示不允许出现答案名；写出的数字如果等于本题答案，会被拦下；一份内容里前面的提示不许说出后面题目的答案。任一条不过，整份内容拒收。<br><span style="color:var(--ink-3);font-size:13px">这道闸做的是字面比对，不是语义判断——三级提示的最后一级按设计就该把人引到答案跟前，它拦的是「把答案说出来」，不是「让人推得出来」。数字这一条也按语境区分：「键角是 90 度」拦，「把模型旋转 90 度」放行。</span></li>
   </ul>
 </div>
 </div>
@@ -574,7 +577,9 @@ function isValidSignature(sig) {
   const parsed = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return false;
   if (parsed.toISOString().slice(0, 10) !== date) return false;
-  if (parsed.getTime() > Date.now()) return false;
+  const now = new Date();
+  const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  if (date > todayLocal) return false;
   if (typeof source !== 'string' || clean(source).length < 4) return false;
   if (PLACEHOLDER_SIGNATURES.includes(clean(source).toLowerCase())) return false;
   return true;
@@ -636,13 +641,26 @@ const MISCONCEPTIONS = {
 const ANGLE_TOLERANCE_CAP_DEG = 2.5;
 const ANGLE_TOLERANCE_FLOOR_DEG = 0.2;
 
-function acceptableAngles(entryId) {
-  const { entry, derived } = truthFor(entryId);
-  const observed = entry.observedAngles ?? [];
-  if (observed.some((a) => a.source === 'experimental')) {
-    return observed.map((a) => a.deg);
-  }
+const MEASURABLE_EPS_DEG = 0.6;
+
+function modelAngles(entryId) {
+  const { derived } = truthFor(entryId);
   return ligandAngles(layout(derived.ligandCount, derived.lonePairs).ligands);
+}
+
+function angleAnswersMeasurable(entryId) {
+  const { entry } = truthFor(entryId);
+  const observed = entry.observedAngles ?? [];
+  if (observed.length === 0) return false;
+  const model = modelAngles(entryId);
+  return observed.every((o) => model.some((m) => Math.abs(m - o.deg) <= MEASURABLE_EPS_DEG));
+}
+
+function acceptableAngles(entryId) {
+  const { entry } = truthFor(entryId);
+  const observed = (entry.observedAngles ?? []).map((a) => a.deg);
+  if (angleAnswersMeasurable(entryId)) return modelAngles(entryId);
+  return observed;
 }
 
 function angleTolerance(entryId) {
@@ -684,6 +702,7 @@ function gradeDomainBuild(entryId, studentLigands, studentLonePairs) {
 
   return {
     objectiveId: 'OBJ-1',
+    itemId: `${entryId}:build_domains`,
     passed,
     guessable: false,
     expected: { ligands: correctX, lonePairs: correctE, stericNumber: derived.stericNumber },
@@ -704,6 +723,7 @@ function gradeGeometryName(entryId, answerKey) {
 
   return {
     objectiveId: 'OBJ-2',
+    itemId: `${entryId}:name_geometry`,
     passed,
     guessable: true,
     expected: derived.molecularGeometry.key,
@@ -751,8 +771,9 @@ function gradeAngle(entryId, answerDeg) {
 
   return {
     objectiveId: 'OBJ-3',
+    itemId: `${entryId}:read_angle`,
     passed,
-    guessable: false,
+    guessable: true,
     expected: { anyOf: acceptable, tolerance },
     actual: answerDeg,
     misconception,
@@ -764,6 +785,7 @@ function gradeCompressionDirection(entryId, answer) {
   const expected = derived.lonePairs > 0 ? 'below_ideal' : 'equal_ideal';
   return {
     objectiveId: 'OBJ-3',
+    itemId: `${entryId}:compression_direction`,
     passed: answer === expected,
     guessable: true,
     expected,
@@ -781,7 +803,10 @@ function summarize(results) {
 
     const passedHits = hits.filter((r) => r.passed === true);
     const hasUnguessableEvidence = passedHits.some((r) => r.guessable === false);
-    const enoughGuessable = passedHits.filter((r) => r.guessable !== false).length >= 2;
+    const guessableItems = new Set(passedHits
+      .filter((r) => r.guessable !== false)
+      .map((r, i) => r.itemId ?? `anon-${i}`));
+    const enoughGuessable = guessableItems.size >= 2;
 
     let state = 'not_started';
     if (attempted > 0) {
@@ -861,17 +886,17 @@ function chineseNumerals(text) {
   const out = [];
   const re = /[零一二两三四五六七八九十百]+(?:点[零一二两三四五六七八九]+)?/g;
   for (const m of text.matchAll(re)) {
-    const t = m[0];
-    const [intPart, decPart] = t.split('点');
-    let n = 0; let section = 0; let seen = false;
+    const [intPart, decPart] = m[0].split('点');
+    let section = 0;
+    let digit = 0;
+    let seen = false;
     for (const ch of intPart) {
-      if (ch === '百') { section = (section || 1) * 100; seen = true; }
-      else if (ch === '十') { section += (section % 100 ? 0 : 0) || 0; section += 10 * ((section % 10) || 1) / ((section % 10) || 1); seen = true; }
-      else if (ch in CN_NUM) { section = section + CN_NUM[ch]; seen = true; }
+      if (ch === '十') { section += (digit || 1) * 10; digit = 0; seen = true; }
+      else if (ch === '百') { section += (digit || 1) * 100; digit = 0; seen = true; }
+      else if (ch in CN_NUM) { digit = CN_NUM[ch]; seen = true; }
     }
-    n = section;
     if (!seen) continue;
-    let val = n;
+    let val = section + digit;
     if (decPart) {
       let frac = 0; let scale = 0.1;
       for (const ch of decPart) { if (ch in CN_NUM) { frac += CN_NUM[ch] * scale; scale /= 10; } }
@@ -940,15 +965,35 @@ function checkShape(node, path, out, seen = new WeakSet(), depth = 0) {
 function textLeaks(text, taskType, derived, entry, strict = true) {
   const leaks = hintLeaksAnswer(text, taskType, derived, entry);
 
-  const answerNumbers = new Set([
-    ...(entry.observedAngles ?? []).map((a) => a.deg),
-    ...derived.idealAngles,
-  ]);
+  const answerNumbers = new Set(derived.idealAngles);
+  try { for (const a of acceptableAngles(entry.id)) answerNumbers.add(a); } catch { /* 表外分子 */ }
+  for (const a of (entry.observedAngles ?? [])) answerNumbers.add(a.deg);
   let tol = 1;
   try { tol = angleTolerance(entry.id); } catch { tol = 1; }
-  for (const n of numbersIn(text)) {
+
+  const norm = normalizeDigits(text);
+  const ANGLE_CTX = /(键角|夹角|角度|角是|度数)[^。；\n]{0,12}$/;
+  const ROTATE_CTX = /(旋转|转动|转过|视角|转)[^。；\n]{0,12}$/;
+  const flagNumber = (n, idx) => {
+    const prefix = norm.slice(Math.max(0, idx - 16), idx);
+    if (ROTATE_CTX.test(prefix)) return false;      // 「旋转 180 度」不是答案
+    if (ANGLE_CTX.test(prefix)) return true;        // 「键角是 107 度」是答案
+    return taskType === 'read_angle';               // 读数题里裸数字也当答案
+  };
+  for (const m of norm.matchAll(/\d+(?:\.\d+)?/g)) {
+    const n = Number(m[0]);
+    if (!flagNumber(n, m.index)) continue;
     for (const a of answerNumbers) {
       if (Math.abs(n - a) <= tol) leaks.push(`${n}（判分会把它判对，等于答案 ${a}）`);
+    }
+  }
+  if (ANGLE_CTX.test(norm.replace(/[零一二两三四五六七八九十百]+/g, '')) || /键角|夹角|角度/.test(norm)) {
+    if (!/旋转|转动|转过/.test(norm)) {
+      for (const n of chineseNumerals(norm)) {
+        for (const a of answerNumbers) {
+          if (Math.abs(n - a) <= tol) leaks.push(`${n}（判分会把它判对，等于答案 ${a}）`);
+        }
+      }
     }
   }
 
@@ -1015,6 +1060,10 @@ function checkSpec(spec) {
 
   checkKeys(spec, ALLOWED_SPEC_KEYS, '$', 'GATE-2', v);
 
+  if (spec.title !== undefined && typeof spec.title !== 'string') {
+    v.push(new Violation('GATE-0', '$.title', `title 必须是字符串，收到 ${
+      Array.isArray(spec.title) ? 'array' : typeof spec.title}`));
+  }
   if (typeof spec.title === 'string') {
     const titleLeaks = new Set();
     for (const task of spec.tasks) {
@@ -1066,9 +1115,15 @@ function checkSpec(spec) {
       return;
     }
 
-    if (task.type === 'read_angle' && !isAngleTaskEligible(entry)) {
-      v.push(new Violation('GATE-4', `${p}.type`,
-        `${entry.display} 的键角未经签核或缺值，不得出读数任务`));
+    if (task.type === 'read_angle') {
+      if (!isAngleTaskEligible(entry)) {
+        v.push(new Violation('GATE-4', `${p}.type`,
+          `${entry.display} 的键角未经签核或缺值，不得出读数任务`));
+      } else if (!angleAnswersMeasurable(entry.id)) {
+        v.push(new Violation('GATE-4', `${p}.type`,
+          `${entry.display} 的实测键角在理想构型模型上量不出来，出读数题会变成必错题；`
+          + `改用 compression_direction`));
+      }
     }
 
     const declared = task.objectiveId;
@@ -1111,12 +1166,14 @@ function checkSpec(spec) {
     }
   });
 
-  const usable = spec.tasks.filter((t) => t && typeof t === 'object' && TASK_TYPES[t.type] && getEntry(t.moleculeId));
-  usable.forEach((task, i) => {
+  const usable = spec.tasks
+    .map((t, origIndex) => ({ t, origIndex }))
+    .filter(({ t }) => t && typeof t === 'object' && TASK_TYPES[t.type] && getEntry(t.moleculeId));
+  usable.forEach(({ t: task, origIndex: i }, ii) => {
     const texts = [task.prompt, ...(Array.isArray(task.hints) ? task.hints : [])]
       .filter((x) => typeof x === 'string');
-    usable.forEach((other, j) => {
-      if (j <= i) return;
+    usable.forEach(({ t: other, origIndex: j }, jj) => {
+      if (jj <= ii) return;
       if (other.moleculeId !== task.moleculeId) return;
       const e = getEntry(other.moleculeId);
       let d;
@@ -1286,6 +1343,7 @@ class MoleculeView {
     this.showCentral = true;
     this.showLigands = true;
     this.lonePairDistanceOverride = null;
+    this.ligandRadiusScale = 1;
     this._bindDrag();
   }
 
@@ -1400,7 +1458,7 @@ class MoleculeView {
         continue;
       }
 
-      const r = scale * radiusOf(it.el) * (it.isCentral ? 1.15 : 1) * ds;
+      const r = scale * radiusOf(it.el) * (it.isCentral ? 1.15 : this.ligandRadiusScale) * ds;
       if (it.idx !== undefined && this.selection?.has(it.idx)) {
         ctx.strokeStyle = '#ffd166';
         ctx.lineWidth = 3;
@@ -1691,6 +1749,7 @@ function submit(result) {
       : '';
     fb.innerHTML = `<div class="bad">还不对。</div>${mis}`;
   }
+  for (const b of $('controls').querySelectorAll('button')) b.disabled = true;
   $('btn-next').disabled = false;
   renderObjectives();
   renderEvidence();
