@@ -251,1038 +251,6 @@ window.__EMBEDDED_SPEC = {
   ]
 };
 
-const VALENCE = {
-  H: 1, He: 2,
-  Li: 1, Be: 2, B: 3, C: 4, N: 5, O: 6, F: 7, Ne: 8,
-  Na: 1, Mg: 2, Al: 3, Si: 4, P: 5, S: 6, Cl: 7, Ar: 8,
-  K: 1, Ca: 2, Ga: 3, Ge: 4, As: 5, Se: 6, Br: 7, Kr: 8,
-  Rb: 1, Sr: 2, In: 3, Sn: 4, Sb: 5, Te: 6, I: 7, Xe: 8,
-};
-
-const ELECTRON_PAIR_GEOMETRY = {
-  2: { key: 'linear', zh: '直线形', idealAngles: [180] },
-  3: { key: 'trigonal_planar', zh: '平面三角形', idealAngles: [120] },
-  4: { key: 'tetrahedral', zh: '四面体形', idealAngles: [109.5] },
-  5: { key: 'trigonal_bipyramidal', zh: '三角双锥形', idealAngles: [90, 120] },
-  6: { key: 'octahedral', zh: '正八面体形', idealAngles: [90] },
-};
-
-const MOLECULAR_GEOMETRY = {
-  '2_0': { key: 'linear', zh: '直线形', notation: 'AX2' },
-  '3_0': { key: 'trigonal_planar', zh: '平面三角形', notation: 'AX3' },
-  '2_1': { key: 'bent', zh: '角形', notation: 'AX2E' },
-  '4_0': { key: 'tetrahedral', zh: '四面体形', notation: 'AX4' },
-  '3_1': { key: 'trigonal_pyramidal', zh: '三角锥形', notation: 'AX3E' },
-  '2_2': { key: 'bent', zh: '角形', notation: 'AX2E2' },
-  '5_0': { key: 'trigonal_bipyramidal', zh: '三角双锥形', notation: 'AX5' },
-  '4_1': { key: 'seesaw', zh: '变形四面体形', notation: 'AX4E' },
-  '3_2': { key: 't_shaped', zh: 'T 形', notation: 'AX3E2' },
-  '2_3': { key: 'linear', zh: '直线形', notation: 'AX2E3' },
-  '6_0': { key: 'octahedral', zh: '正八面体形', notation: 'AX6' },
-  '5_1': { key: 'square_pyramidal', zh: '四方锥形', notation: 'AX5E' },
-  '4_2': { key: 'square_planar', zh: '平面四方形', notation: 'AX4E2' },
-};
-
-class VseprError extends Error {
-  constructor(code, message) {
-    super(message);
-    this.code = code;
-  }
-}
-
-function countDomains(formula) {
-  const { central, ligand, n, charge = 0 } = formula;
-
-  if (!Object.prototype.hasOwnProperty.call(VALENCE, central)) {
-    throw new VseprError('UNSUPPORTED_CENTRAL',
-      `中心原子 ${central} 不在主族价电子表内，VSEPR 不适用`);
-  }
-  if (!Object.prototype.hasOwnProperty.call(VALENCE, ligand)) {
-    throw new VseprError('UNSUPPORTED_LIGAND',
-      `配体原子 ${ligand} 不在主族价电子表内`);
-  }
-  if (!Number.isInteger(n) || n < 2 || n > 6) {
-    throw new VseprError('LIGAND_COUNT_RANGE',
-      `配体数须为 2–6 的整数，收到 ${n}`);
-  }
-  if (!Number.isInteger(charge) || Math.abs(charge) > 3) {
-    throw new VseprError('CHARGE_RANGE', `电荷须为 -3–3 的整数，收到 ${charge}`);
-  }
-
-  const totalValence = VALENCE[central] + n * VALENCE[ligand] - charge;
-
-  if (totalValence % 2 !== 0) {
-    throw new VseprError('ODD_ELECTRON',
-      `总价电子数 ${totalValence} 为奇数（自由基），本引擎不处理`);
-  }
-  if (totalValence < 2 * n) {
-    throw new VseprError('INSUFFICIENT_ELECTRONS',
-      `总价电子数 ${totalValence} 不足以形成 ${n} 根单键`);
-  }
-
-  const bondingElectrons = 2 * n;
-  const afterBonds = totalValence - bondingElectrons;
-
-  const perTerminalNeed = ligand === 'H' ? 0 : 6;
-  const terminalNeed = n * perTerminalNeed;
-  const leftover = afterBonds - terminalNeed;
-
-  let lonePairs;
-  let extraBonds = 0;
-  if (leftover >= 0) {
-    if (leftover % 2 !== 0) {
-      throw new VseprError('UNPAIRED_REMAINDER',
-        `中心原子剩余 ${leftover} 个电子无法成对`);
-    }
-    lonePairs = leftover / 2;
-  } else {
-    extraBonds = Math.ceil(-leftover / 2);
-    lonePairs = 0;
-  }
-
-  const stericNumber = n + lonePairs;
-  if (!ELECTRON_PAIR_GEOMETRY[stericNumber]) {
-    throw new VseprError('STERIC_NUMBER_RANGE',
-      `价层电子对数 ${stericNumber} 超出本引擎覆盖的 2–6`);
-  }
-
-  return {
-    ligandCount: n,
-    lonePairs,
-    stericNumber,
-    trace: {
-      totalValence,
-      bondingElectrons,
-      afterBonds,
-      terminalNeed,
-      leftover,
-      extraBonds,
-    },
-  };
-}
-
-function deriveGeometry(formula) {
-  const domains = countDomains(formula);
-  const { ligandCount, lonePairs, stericNumber } = domains;
-
-  const epg = ELECTRON_PAIR_GEOMETRY[stericNumber];
-  const mgKey = `${ligandCount}_${lonePairs}`;
-  const mg = MOLECULAR_GEOMETRY[mgKey];
-
-  if (!mg) {
-    throw new VseprError('GEOMETRY_NOT_TABULATED',
-      `组合 AX${ligandCount}E${lonePairs} 不在分子几何表内`);
-  }
-
-  return {
-    formula,
-    ...domains,
-    electronPairGeometry: epg,
-    molecularGeometry: mg,
-    idealAngles: epg.idealAngles,
-    epgDiffersFromMg: lonePairs > 0 && epg.key !== mg.key,
-    angleCompression: lonePairs > 0 ? 'compressed_below_ideal' : 'none',
-  };
-}
-
-function geometrySignature(derived) {
-  return `${derived.ligandCount}_${derived.lonePairs}`;
-}
-
-
-const S3 = 1 / Math.sqrt(3);
-const COS30 = Math.sqrt(3) / 2;
-
-const DOMAIN_POSITIONS = {
-  2: [[0, 0, 1], [0, 0, -1]],
-  3: [[1, 0, 0], [-0.5, COS30, 0], [-0.5, -COS30, 0]],
-  4: [[S3, S3, S3], [S3, -S3, -S3], [-S3, S3, -S3], [-S3, -S3, S3]],
-  5: [
-    [1, 0, 0], [-0.5, COS30, 0], [-0.5, -COS30, 0], // 赤道位
-    [0, 0, 1], [0, 0, -1],                           // 轴向位
-  ],
-  6: [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]],
-};
-
-const LONE_PAIR_PRIORITY = {
-  2: [0, 1],
-  3: [0, 1, 2],
-  4: [0, 1, 2, 3],
-  5: [0, 1, 2, 3, 4],
-  6: [4, 5, 0, 1, 2, 3],
-};
-
-function layout(ligandCount, lonePairCount) {
-  const sn = ligandCount + lonePairCount;
-  const positions = DOMAIN_POSITIONS[sn];
-  if (!positions) {
-    throw new Error(`价层电子对数 ${sn} 没有对应的理想构型（覆盖 2–6）`);
-  }
-  const priority = LONE_PAIR_PRIORITY[sn];
-  const lpIdx = new Set(priority.slice(0, lonePairCount));
-
-  const lonePairs = [];
-  const ligands = [];
-  positions.forEach((p, i) => {
-    if (lpIdx.has(i)) lonePairs.push(p);
-    else ligands.push(p);
-  });
-  return { ligands, lonePairs, stericNumber: sn };
-}
-
-function angleBetween(a, b) {
-  const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const na = Math.hypot(...a);
-  const nb = Math.hypot(...b);
-  const cos = Math.min(1, Math.max(-1, dot / (na * nb)));
-  return (Math.acos(cos) * 180) / Math.PI;
-}
-
-function ligandAngles(ligands) {
-  const out = [];
-  for (let i = 0; i < ligands.length; i += 1) {
-    for (let j = i + 1; j < ligands.length; j += 1) {
-      out.push(angleBetween(ligands[i], ligands[j]));
-    }
-  }
-  const uniq = [];
-  for (const a of out.sort((x, y) => x - y)) {
-    if (!uniq.some((u) => Math.abs(u - a) < 0.5)) uniq.push(a);
-  }
-  return uniq.map((a) => Math.round(a * 10) / 10);
-}
-
-
-
-const CATALOG = [
-  {
-    id: 'CH4',
-    display: 'CH₄',
-    formula: { central: 'C', ligand: 'H', n: 4, charge: 0 },
-    observedAngles: [{ pair: 'H-C-H', deg: 109.5, source: 'symmetry' }],
-    teachingTags: ['baseline_no_lone_pair'],
-    reviewedBy: null,
-  },
-  {
-    id: 'NH3',
-    display: 'NH₃',
-    formula: { central: 'N', ligand: 'H', n: 3, charge: 0 },
-    observedAngles: [{ pair: 'H-N-H', deg: 106.7, source: 'experimental' }],
-    teachingTags: ['epg_vs_mg', 'lone_pair_compression'],
-    reviewedBy: null,
-  },
-  {
-    id: 'H2O',
-    display: 'H₂O',
-    formula: { central: 'O', ligand: 'H', n: 2, charge: 0 },
-    observedAngles: [{ pair: 'H-O-H', deg: 104.5, source: 'experimental' }],
-    teachingTags: ['epg_vs_mg', 'lone_pair_compression'],
-    reviewedBy: null,
-  },
-  {
-    id: 'CO2',
-    display: 'CO₂',
-    formula: { central: 'C', ligand: 'O', n: 2, charge: 0 },
-    observedAngles: [{ pair: 'O-C-O', deg: 180, source: 'symmetry' }],
-    teachingTags: ['multiple_bond_one_domain'],
-    reviewedBy: null,
-  },
-  {
-    id: 'BF3',
-    display: 'BF₃',
-    formula: { central: 'B', ligand: 'F', n: 3, charge: 0 },
-    observedAngles: [{ pair: 'F-B-F', deg: 120, source: 'symmetry' }],
-    teachingTags: ['electron_deficient', 'baseline_no_lone_pair'],
-    reviewedBy: null,
-  },
-  {
-    id: 'SO2',
-    display: 'SO₂',
-    formula: { central: 'S', ligand: 'O', n: 2, charge: 0 },
-    observedAngles: [{ pair: 'O-S-O', deg: 119, source: 'experimental' }],
-    teachingTags: ['epg_vs_mg', 'lone_pair_compression'],
-    reviewedBy: null,
-  },
-  {
-    id: 'XeF4',
-    display: 'XeF₄',
-    formula: { central: 'Xe', ligand: 'F', n: 4, charge: 0 },
-    observedAngles: [{ pair: 'F-Xe-F', deg: 90, source: 'symmetry' }],
-    teachingTags: ['epg_vs_mg', 'expanded_octet', 'lone_pair_placement'],
-    reviewedBy: null,
-  },
-  {
-    id: 'XeF2',
-    display: 'XeF₂',
-    formula: { central: 'Xe', ligand: 'F', n: 2, charge: 0 },
-    observedAngles: [{ pair: 'F-Xe-F', deg: 180, source: 'symmetry' }],
-    teachingTags: ['epg_vs_mg', 'expanded_octet', 'three_lone_pairs_still_linear'],
-    reviewedBy: null,
-  },
-  {
-    id: 'SF6',
-    display: 'SF₆',
-    formula: { central: 'S', ligand: 'F', n: 6, charge: 0 },
-    observedAngles: [{ pair: 'F-S-F', deg: 90, source: 'symmetry' }],
-    teachingTags: ['expanded_octet', 'baseline_no_lone_pair'],
-    reviewedBy: null,
-  },
-  {
-    id: 'PCl5',
-    display: 'PCl₅',
-    formula: { central: 'P', ligand: 'Cl', n: 5, charge: 0 },
-    observedAngles: [
-      { pair: 'Cl-P-Cl (赤道面内)', deg: 120, source: 'symmetry' },
-      { pair: 'Cl-P-Cl (轴向对赤道)', deg: 90, source: 'symmetry' },
-    ],
-    teachingTags: ['expanded_octet', 'two_angle_families'],
-    reviewedBy: null,
-  },
-  {
-    id: 'SF4',
-    display: 'SF₄',
-    formula: { central: 'S', ligand: 'F', n: 4, charge: 0 },
-    observedAngles: null,
-    teachingTags: ['epg_vs_mg', 'lone_pair_placement', 'expanded_octet'],
-    reviewedBy: null,
-  },
-  {
-    id: 'NH4+',
-    display: 'NH₄⁺',
-    formula: { central: 'N', ligand: 'H', n: 4, charge: 1 },
-    observedAngles: [{ pair: 'H-N-H', deg: 109.5, source: 'symmetry' }],
-    teachingTags: ['charged_species', 'baseline_no_lone_pair'],
-    reviewedBy: null,
-  },
-];
-
-const BY_ID = new Map(CATALOG.map((e) => [e.id, e]));
-
-function getEntry(id) {
-  return BY_ID.get(id) ?? null;
-}
-
-const PLACEHOLDER_SIGNATURES = [
-  'todo', 'tbd', 'test', 'x', 'xx', 'xxx', 'n/a', 'na', 'none', 'null', '-', '?',
-  '待补', '待定', '未定', '待签', '签核中', '教研', 'reviewer', 'admin',
-];
-
-function isValidSignature(sig) {
-  if (sig === null || typeof sig !== 'object' || Array.isArray(sig)) return false;
-  const { by, date, source } = sig;
-  const clean = (x) => x.replace(/[\s\u200b-\u200f\u2060\ufeff\u3000]/g, '');
-  if (typeof by !== 'string' || clean(by).length < 2) return false;
-  if (PLACEHOLDER_SIGNATURES.includes(clean(by).toLowerCase())) return false;
-  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-  const parsed = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return false;
-  if (parsed.toISOString().slice(0, 10) !== date) return false;
-  const now = new Date();
-  const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  if (date > todayLocal) return false;
-  if (typeof source !== 'string' || clean(source).length < 4) return false;
-  if (PLACEHOLDER_SIGNATURES.includes(clean(source).toLowerCase())) return false;
-  return true;
-}
-
-function isAngleTaskEligible(entry) {
-  if (!entry || !entry.observedAngles || entry.observedAngles.length === 0) return false;
-  const allSymmetry = entry.observedAngles.every((a) => a.source === 'symmetry');
-  if (allSymmetry) return true;
-  return isValidSignature(entry.reviewedBy);
-}
-
-
-
-
-
-
-const OBJECTIVES = [
-  {
-    id: 'OBJ-1',
-    zh: '由分子式定出价层电子对数与孤对数',
-    detail: '数对电子域，才有后面所有判断',
-  },
-  {
-    id: 'OBJ-2',
-    zh: '区分电子对几何与分子几何',
-    detail: '孤对占据电子域但不出现在分子形状里',
-  },
-  {
-    id: 'OBJ-3',
-    zh: '读出键角，并判断孤对把它压向哪一侧',
-    detail: '孤对斥力大于成键电子对，把键角压到理想值以下；无孤对时键角等于理想值',
-  },
-];
-
-const MISCONCEPTIONS = {
-  EPG_AS_MG: {
-    id: 'EPG_AS_MG',
-    zh: '把电子对几何当成分子几何',
-    evidence: '学生给出的名称正好等于该分子的电子对几何名',
-  },
-  LONE_PAIR_IGNORED: {
-    id: 'LONE_PAIR_IGNORED',
-    zh: '漏数中心原子孤对',
-    evidence: '学生搭出的电子域数等于配体数，孤对被当成不存在',
-  },
-  LONE_PAIR_AS_LIGAND: {
-    id: 'LONE_PAIR_AS_LIGAND',
-    zh: '把孤对当成配体',
-    evidence: '学生的配体数等于正确的电子域总数',
-  },
-  IDEAL_ANGLE_ASSUMED: {
-    id: 'IDEAL_ANGLE_ASSUMED',
-    zh: '直接用理想键角，未考虑孤对压缩',
-    evidence: '存在孤对时学生给出的角度等于电子对几何的理想角',
-  },
-};
-
-const ANGLE_TOLERANCE_CAP_DEG = 2.5;
-const ANGLE_TOLERANCE_FLOOR_DEG = 0.2;
-
-const MEASURABLE_EPS_DEG = 0.6;
-
-function modelAngles(entryId) {
-  const { derived } = truthFor(entryId);
-  return ligandAngles(layout(derived.ligandCount, derived.lonePairs).ligands);
-}
-
-function angleAnswersMeasurable(entryId) {
-  const { entry } = truthFor(entryId);
-  const observed = entry.observedAngles ?? [];
-  if (observed.length === 0) return false;
-  const model = modelAngles(entryId);
-  return observed.every((o) => model.some((m) => Math.abs(m - o.deg) <= MEASURABLE_EPS_DEG));
-}
-
-function acceptableAngles(entryId) {
-  const { entry } = truthFor(entryId);
-  const observed = (entry.observedAngles ?? []).map((a) => a.deg);
-  if (angleAnswersMeasurable(entryId)) return modelAngles(entryId);
-  return observed;
-}
-
-function angleTolerance(entryId) {
-  const { derived } = truthFor(entryId);
-  const pts = [...acceptableAngles(entryId)];
-  if (derived.lonePairs > 0) {
-    for (const d of derived.idealAngles) {
-      if (!pts.some((x) => Math.abs(x - d) < 0.01)) pts.push(d);
-    }
-  }
-  pts.sort((a, b) => a - b);
-  let minSep = Infinity;
-  for (let i = 1; i < pts.length; i += 1) minSep = Math.min(minSep, pts[i] - pts[i - 1]);
-  if (!Number.isFinite(minSep)) return ANGLE_TOLERANCE_CAP_DEG;
-  return Math.min(ANGLE_TOLERANCE_CAP_DEG,
-    Math.max(ANGLE_TOLERANCE_FLOOR_DEG, minSep / 3));
-}
-
-function truthFor(entryId) {
-  const entry = getEntry(entryId);
-  if (!entry) throw new Error(`分子 ${entryId} 不在常数表内`);
-  return { entry, derived: deriveGeometry(entry.formula) };
-}
-
-function gradeDomainBuild(entryId, studentLigands, studentLonePairs) {
-  const { derived } = truthFor(entryId);
-  const correctX = derived.ligandCount;
-  const correctE = derived.lonePairs;
-  const passed = studentLigands === correctX && studentLonePairs === correctE;
-
-  let misconception = null;
-  if (!passed) {
-    if (studentLigands === correctX && studentLonePairs === 0 && correctE > 0) {
-      misconception = MISCONCEPTIONS.LONE_PAIR_IGNORED;
-    } else if (studentLigands === derived.stericNumber && correctE > 0) {
-      misconception = MISCONCEPTIONS.LONE_PAIR_AS_LIGAND;
-    }
-  }
-
-  return {
-    objectiveId: 'OBJ-1',
-    itemId: `${entryId}:build_domains`,
-    passed,
-    guessable: false,
-    expected: { ligands: correctX, lonePairs: correctE, stericNumber: derived.stericNumber },
-    actual: { ligands: studentLigands, lonePairs: studentLonePairs },
-    misconception,
-  };
-}
-
-function gradeGeometryName(entryId, answerKey) {
-  const { derived } = truthFor(entryId);
-  const passed = answerKey === derived.molecularGeometry.key;
-
-  let misconception = null;
-  if (!passed && derived.epgDiffersFromMg
-      && answerKey === derived.electronPairGeometry.key) {
-    misconception = MISCONCEPTIONS.EPG_AS_MG;
-  }
-
-  return {
-    objectiveId: 'OBJ-2',
-    itemId: `${entryId}:name_geometry`,
-    passed,
-    guessable: true,
-    expected: derived.molecularGeometry.key,
-    actual: answerKey,
-    misconception,
-  };
-}
-
-function gradeAngle(entryId, answerDeg) {
-  const { entry, derived } = truthFor(entryId);
-  if (!isAngleTaskEligible(entry)) {
-    return {
-      objectiveId: 'OBJ-3',
-      passed: null,
-      skipped: true,
-      reason: 'ANGLE_NOT_REVIEWED',
-      detail: `${entry.display} 的实验键角未经教研签核，本关不判读数`,
-    };
-  }
-
-  if (typeof answerDeg !== 'number' || !Number.isFinite(answerDeg)) {
-    return {
-      objectiveId: 'OBJ-3',
-      passed: false,
-      expected: { anyOf: acceptableAngles(entryId) },
-      actual: answerDeg,
-      misconception: null,
-    };
-  }
-
-  const acceptable = acceptableAngles(entryId);
-  const tolerance = angleTolerance(entryId);
-  const passed = acceptable.some((deg) => Math.abs(answerDeg - deg) <= tolerance);
-
-  let misconception = null;
-  if (!passed && derived.lonePairs > 0 && derived.idealAngles.length === 1) {
-    const ideal = derived.idealAngles[0];
-    const hitsIdeal = Math.abs(answerDeg - ideal) <= tolerance;
-    const idealIsAcceptable = acceptable.some((a) => Math.abs(a - ideal) < 0.01);
-    const compressed = acceptable.some((a) => a < ideal - 0.01);
-    if (hitsIdeal && !idealIsAcceptable && compressed) {
-      misconception = MISCONCEPTIONS.IDEAL_ANGLE_ASSUMED;
-    }
-  }
-
-  return {
-    objectiveId: 'OBJ-3',
-    itemId: `${entryId}:read_angle`,
-    passed,
-    guessable: true,
-    expected: { anyOf: acceptable, tolerance },
-    actual: answerDeg,
-    misconception,
-  };
-}
-
-function gradeCompressionDirection(entryId, answer) {
-  const { derived } = truthFor(entryId);
-  const expected = derived.lonePairs > 0 ? 'below_ideal' : 'equal_ideal';
-  return {
-    objectiveId: 'OBJ-3',
-    itemId: `${entryId}:compression_direction`,
-    passed: answer === expected,
-    guessable: true,
-    expected,
-    actual: answer,
-    misconception: null,
-  };
-}
-
-function summarize(results) {
-  return OBJECTIVES.map((obj) => {
-    const hits = results.filter((r) => r.objectiveId === obj.id && !r.skipped);
-    const attempted = hits.length;
-    const passed = hits.filter((r) => r.passed === true).length;
-    const latestPassed = hits.length > 0 && hits[hits.length - 1].passed === true;
-
-    const passedHits = hits.filter((r) => r.passed === true);
-    const hasUnguessableEvidence = passedHits.some((r) => r.guessable === false);
-    const guessableItems = new Set(passedHits
-      .filter((r) => r.guessable !== false)
-      .map((r, i) => r.itemId ?? `anon-${i}`));
-    const enoughGuessable = guessableItems.size >= 2;
-
-    let state = 'not_started';
-    if (attempted > 0) {
-      if (passed !== attempted) state = latestPassed ? 'recovered' : 'in_progress';
-      else if (hasUnguessableEvidence || enoughGuessable) state = 'met';
-      else state = 'met_provisional';
-    }
-    return {
-      ...obj,
-      attempted,
-      passed,
-      state,
-      misconceptions: [...new Set(hits.filter((r) => r.misconception)
-        .map((r) => r.misconception.id))],
-    };
-  });
-}
-
-function toXapiStatement(actor, entryId, result) {
-  if (result.skipped) {
-    return {
-      actor: { name: actor, objectType: 'Agent' },
-      verb: { id: 'http://adlnet.gov/expapi/verbs/waived', display: { 'zh-CN': 'waived' } },
-      object: {
-        id: `https://cocorobo.cn/bench/vsepr/${entryId}#${result.objectiveId}`,
-        definition: { type: 'http://adlnet.gov/expapi/activities/cmi.interaction' },
-      },
-      result: {
-        extensions: { 'https://cocorobo.cn/xapi/ext/waived-reason': result.reason ?? null },
-      },
-      timestamp: new Date().toISOString(),
-    };
-  }
-  const verb = result.passed === true ? 'answered' : 'attempted';
-  return {
-    actor: { name: actor, objectType: 'Agent' },
-    verb: { id: `http://adlnet.gov/expapi/verbs/${verb}`, display: { 'zh-CN': verb } },
-    object: {
-      id: `https://cocorobo.cn/bench/vsepr/${entryId}#${result.objectiveId}`,
-      definition: { type: 'http://adlnet.gov/expapi/activities/cmi.interaction' },
-    },
-    result: {
-      success: result.passed === true,
-      response: JSON.stringify(result.actual),
-      extensions: {
-        'https://cocorobo.cn/xapi/ext/misconception': result.misconception?.id ?? null,
-        'https://cocorobo.cn/xapi/ext/expected': JSON.stringify(result.expected ?? null),
-      },
-    },
-    timestamp: new Date().toISOString(),
-  };
-}
-
-
-
-
-
-
-const TASK_TYPES = {
-  build_domains: { grader: 'gradeDomainBuild', objective: 'OBJ-1' },
-  name_geometry: { grader: 'gradeGeometryName', objective: 'OBJ-2' },
-  read_angle: { grader: 'gradeAngle', objective: 'OBJ-3' },
-  compression_direction: { grader: 'gradeCompressionDirection', objective: 'OBJ-3' },
-};
-
-const ALLOWED_TASK_KEYS = ['type', 'moleculeId', 'objectiveId', 'prompt', 'hints'];
-const ALLOWED_SPEC_KEYS = ['benchId', 'title', 'tasks', '_note'];
-
-const FULLWIDTH_DIGITS = /[０-９．]/g;
-const CN_NUM = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
-
-function normalizeDigits(text) {
-  return text.replace(FULLWIDTH_DIGITS, (c) => (c === '．' ? '.' : String.fromCharCode(c.charCodeAt(0) - 0xfee0)));
-}
-
-function chineseNumerals(text) {
-  const out = [];
-  const re = /[零一二两三四五六七八九十百]+(?:点[零一二两三四五六七八九]+)?/g;
-  for (const m of text.matchAll(re)) {
-    const [intPart, decPart] = m[0].split('点');
-    let section = 0;
-    let digit = 0;
-    let seen = false;
-    for (const ch of intPart) {
-      if (ch === '十') { section += (digit || 1) * 10; digit = 0; seen = true; }
-      else if (ch === '百') { section += (digit || 1) * 100; digit = 0; seen = true; }
-      else if (ch in CN_NUM) { digit = CN_NUM[ch]; seen = true; }
-    }
-    if (!seen) continue;
-    let val = section + digit;
-    if (decPart) {
-      let frac = 0; let scale = 0.1;
-      for (const ch of decPart) { if (ch in CN_NUM) { frac += CN_NUM[ch] * scale; scale /= 10; } }
-      val += frac;
-    }
-    out.push(val);
-  }
-  return out;
-}
-
-function numbersIn(text) {
-  const norm = normalizeDigits(text);
-  const nums = [...norm.matchAll(/\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
-  return [...nums, ...chineseNumerals(norm)];
-}
-
-const KW = '孤对|电子域|配体|成键电子对';
-const NUM = '[0-9０-９零一二两三四五六七八九十]';
-const DOMAIN_COUNT_PATTERN = new RegExp(
-  `(?:(?:${KW})\\s*(?:的)?(?:数|总数|数目)?\\s*(?:是|为|=|有|共)\\s*${NUM})`
-  + `|(?:${NUM}\\s*(?:个|对|组)\\s*(?:${KW}))`);
-
-const HINT_LEVELS = 3;
-const MAX_SPEC_DEPTH = 12;
-
-class Violation {
-  constructor(gate, path, message) {
-    this.gate = gate;
-    this.path = path;
-    this.message = message;
-  }
-  toString() {
-    return `[${this.gate}] ${this.path}: ${this.message}`;
-  }
-}
-
-function checkKeys(node, allowed, path, gate, out) {
-  if (node === null || typeof node !== 'object' || Array.isArray(node)) return;
-  for (const key of Object.keys(node)) {
-    if (!allowed.includes(key)) {
-      out.push(new Violation(gate, `${path}.${key}`,
-        `规格不允许出现字段 ${JSON.stringify(key)}；` +
-        `只允许 ${allowed.join(' / ')}。答案与数值必须由确定层推出`));
-    }
-  }
-}
-
-function checkShape(node, path, out, seen = new WeakSet(), depth = 0) {
-  if (node === null || typeof node !== 'object') return;
-  if (seen.has(node)) {
-    out.push(new Violation('GATE-0', path, '规格存在循环引用'));
-    return;
-  }
-  if (depth > MAX_SPEC_DEPTH) {
-    out.push(new Violation('GATE-0', path, `规格嵌套超过 ${MAX_SPEC_DEPTH} 层`));
-    return;
-  }
-  seen.add(node);
-  const entries = Array.isArray(node)
-    ? node.map((v, i) => [`[${i}]`, v])
-    : Object.entries(node).map(([k, v]) => [`.${k}`, v]);
-  for (const [seg, value] of entries) checkShape(value, `${path}${seg}`, out, seen, depth + 1);
-  seen.delete(node);
-}
-
-function textLeaks(text, taskType, derived, entry, strict = true) {
-  const leaks = hintLeaksAnswer(text, taskType, derived, entry);
-
-  const answerNumbers = new Set(derived.idealAngles);
-  try { for (const a of acceptableAngles(entry.id)) answerNumbers.add(a); } catch { /* 表外分子 */ }
-  for (const a of (entry.observedAngles ?? [])) answerNumbers.add(a.deg);
-  let tol = 1;
-  try { tol = angleTolerance(entry.id); } catch { tol = 1; }
-
-  const norm = normalizeDigits(text);
-  const ANGLE_CTX = /(键角|夹角|角度|角是|度数)[^。；\n]{0,12}$/;
-  const ROTATE_CTX = /(旋转|转动|转过|视角|转)[^。；\n]{0,12}$/;
-  const flagNumber = (n, idx) => {
-    const prefix = norm.slice(Math.max(0, idx - 16), idx);
-    if (ROTATE_CTX.test(prefix)) return false;      // 「旋转 180 度」不是答案
-    if (ANGLE_CTX.test(prefix)) return true;        // 「键角是 107 度」是答案
-    return taskType === 'read_angle';               // 读数题里裸数字也当答案
-  };
-  for (const m of norm.matchAll(/\d+(?:\.\d+)?/g)) {
-    const n = Number(m[0]);
-    if (!flagNumber(n, m.index)) continue;
-    for (const a of answerNumbers) {
-      if (Math.abs(n - a) <= tol) leaks.push(`${n}（判分会把它判对，等于答案 ${a}）`);
-    }
-  }
-  if (ANGLE_CTX.test(norm.replace(/[零一二两三四五六七八九十百]+/g, '')) || /键角|夹角|角度/.test(norm)) {
-    if (!/旋转|转动|转过/.test(norm)) {
-      for (const n of chineseNumerals(norm)) {
-        for (const a of answerNumbers) {
-          if (Math.abs(n - a) <= tol) leaks.push(`${n}（判分会把它判对，等于答案 ${a}）`);
-        }
-      }
-    }
-  }
-
-  if (strict && taskType === 'build_domains'
-      && DOMAIN_COUNT_PATTERN.test(normalizeDigits(text))) {
-    const counts = new Set([derived.lonePairs, derived.ligandCount, derived.stericNumber]);
-    if (numbersIn(text).some((n) => counts.has(n))) {
-      leaks.push('把电子域计数写在文案里');
-    }
-  }
-  return leaks;
-}
-
-function answerNeedles(taskType, derived, entry) {
-  switch (taskType) {
-    case 'name_geometry': {
-      const zh = derived.molecularGeometry.zh;
-      return [
-        zh,
-        zh.endsWith('形') ? zh.slice(0, -1) : zh,
-        derived.molecularGeometry.notation,
-        derived.molecularGeometry.key,
-      ];
-    }
-    case 'read_angle':
-      return [];
-    case 'compression_direction':
-      return derived.lonePairs > 0 ? ['小于理想', '压缩'] : ['等于理想'];
-    case 'build_domains':
-      return [
-        `${derived.lonePairs} 对孤对`, `孤对 ${derived.lonePairs}`,
-        `${derived.ligandCount} 个配体`, `配体 ${derived.ligandCount}`,
-        `${derived.stericNumber} 个电子域`, `电子域 ${derived.stericNumber}`,
-      ];
-    default:
-      return [];
-  }
-}
-
-function hintLeaksAnswer(hintText, taskType, derived, entry) {
-  return answerNeedles(taskType, derived, entry).filter((n) => n && hintText.includes(n));
-}
-
-function checkSpec(spec) {
-  const v = [];
-
-  if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
-    v.push(new Violation('GATE-0', '$', '规格必须是对象'));
-    return { ok: false, violations: v };
-  }
-
-  if (typeof spec.benchId !== 'string' || !spec.benchId) {
-    v.push(new Violation('GATE-0', '$.benchId', '缺少 benchId'));
-  }
-  if (!Array.isArray(spec.tasks) || spec.tasks.length === 0) {
-    v.push(new Violation('GATE-0', '$.tasks', 'tasks 必须是非空数组'));
-    return { ok: false, violations: v };
-  }
-
-  checkShape(spec, '$', v);
-  if (v.some((x) => x.gate === 'GATE-0' && /循环引用|嵌套超过/.test(x.message))) {
-    return { ok: false, violations: v };
-  }
-
-  checkKeys(spec, ALLOWED_SPEC_KEYS, '$', 'GATE-2', v);
-
-  if (spec.title !== undefined && typeof spec.title !== 'string') {
-    v.push(new Violation('GATE-0', '$.title', `title 必须是字符串，收到 ${
-      Array.isArray(spec.title) ? 'array' : typeof spec.title}`));
-  }
-  if (typeof spec.title === 'string') {
-    const titleLeaks = new Set();
-    for (const task of spec.tasks) {
-      if (!task || typeof task !== 'object') continue;
-      const e = getEntry(task.moleculeId);
-      if (!e) continue;
-      let d;
-      try { d = deriveGeometry(e.formula); } catch { continue; }
-      for (const t of Object.keys(TASK_TYPES)) {
-        for (const leak of textLeaks(spec.title, t, d, e)) titleLeaks.add(leak);
-      }
-    }
-    if (titleLeaks.size > 0) {
-      v.push(new Violation('GATE-5', '$.title',
-        `标题泄露答案或携带数值：出现了 ${[...titleLeaks].map((x) => JSON.stringify(x)).join('、')}`));
-    }
-  }
-
-  spec.tasks.forEach((task, i) => {
-    const p = `$.tasks[${i}]`;
-
-    if (task === null || typeof task !== 'object' || Array.isArray(task)) {
-      v.push(new Violation('GATE-0', p, `任务必须是对象，收到 ${
-        Array.isArray(task) ? 'array' : String(task)}`));
-      return;
-    }
-
-    checkKeys(task, ALLOWED_TASK_KEYS, p, 'GATE-2', v);
-
-    if (!Object.prototype.hasOwnProperty.call(TASK_TYPES, task.type)) {
-      v.push(new Violation('GATE-1', `${p}.type`,
-        `未登记的任务类型 ${JSON.stringify(task.type)}；` +
-        `已登记：${Object.keys(TASK_TYPES).join(' / ')}`));
-      return; // 类型未知，后续检查无从谈起
-    }
-
-    const entry = getEntry(task.moleculeId);
-    if (!entry) {
-      v.push(new Violation('GATE-3', `${p}.moleculeId`,
-        `分子 ${JSON.stringify(task.moleculeId)} 不在常数表内`));
-      return;
-    }
-    let derived;
-    try {
-      derived = deriveGeometry(entry.formula);
-    } catch (err) {
-      v.push(new Violation('GATE-3', `${p}.moleculeId`,
-        `确定层无法推导 ${entry.display}：${err.message}`));
-      return;
-    }
-
-    if (task.type === 'read_angle') {
-      if (!isAngleTaskEligible(entry)) {
-        v.push(new Violation('GATE-4', `${p}.type`,
-          `${entry.display} 的键角未经签核或缺值，不得出读数任务`));
-      } else if (!angleAnswersMeasurable(entry.id)) {
-        v.push(new Violation('GATE-4', `${p}.type`,
-          `${entry.display} 的实测键角在理想构型模型上量不出来，出读数题会变成必错题；`
-          + `改用 compression_direction`));
-      }
-    }
-
-    const declared = task.objectiveId;
-    const bound = TASK_TYPES[task.type].objective;
-    if (declared !== undefined && declared !== bound) {
-      v.push(new Violation('GATE-5', `${p}.objectiveId`,
-        `声明的目标 ${declared} 与类型 ${task.type} 绑定的 ${bound} 不一致`));
-    }
-    if (declared !== undefined && !OBJECTIVES.some((o) => o.id === declared)) {
-      v.push(new Violation('GATE-5', `${p}.objectiveId`,
-        `目标 ${declared} 不在 OBJECTIVES 内`));
-    }
-
-    if (!Array.isArray(task.hints) || task.hints.length !== HINT_LEVELS) {
-      v.push(new Violation('GATE-5', `${p}.hints`,
-        `hint 必须恰好 ${HINT_LEVELS} 级，收到 ${
-          Array.isArray(task.hints) ? task.hints.length : typeof task.hints}`));
-    } else {
-      task.hints.forEach((h, hi) => {
-        if (typeof h !== 'string' || h.trim().length === 0) {
-          v.push(new Violation('GATE-5', `${p}.hints[${hi}]`, 'hint 必须是非空字符串'));
-          return;
-        }
-        const leaks = textLeaks(h, task.type, derived, entry, hi < HINT_LEVELS - 1);
-        if (leaks.length > 0) {
-          v.push(new Violation('GATE-5', `${p}.hints[${hi}]`,
-            `hint 泄露答案：出现了 ${leaks.map((s) => JSON.stringify(s)).join('、')}`));
-        }
-      });
-    }
-
-    if (typeof task.prompt !== 'string' || task.prompt.trim().length === 0) {
-      v.push(new Violation('GATE-0', `${p}.prompt`, '缺少任务文案'));
-    } else {
-      const leaks = textLeaks(task.prompt, task.type, derived, entry);
-      if (leaks.length > 0) {
-        v.push(new Violation('GATE-5', `${p}.prompt`,
-          `题干泄露答案或携带数值：出现了 ${leaks.map((s) => JSON.stringify(s)).join('、')}`));
-      }
-    }
-  });
-
-  const usable = spec.tasks
-    .map((t, origIndex) => ({ t, origIndex }))
-    .filter(({ t }) => t && typeof t === 'object' && TASK_TYPES[t.type] && getEntry(t.moleculeId));
-  usable.forEach(({ t: task, origIndex: i }, ii) => {
-    const texts = [task.prompt, ...(Array.isArray(task.hints) ? task.hints : [])]
-      .filter((x) => typeof x === 'string');
-    usable.forEach(({ t: other, origIndex: j }, jj) => {
-      if (jj <= ii) return;
-      if (other.moleculeId !== task.moleculeId) return;
-      const e = getEntry(other.moleculeId);
-      let d;
-      try { d = deriveGeometry(e.formula); } catch { return; }
-      for (const text of texts) {
-        const leaks = textLeaks(text, other.type, d, e);
-        if (leaks.length > 0) {
-          v.push(new Violation('GATE-5', `$.tasks[${i}]`,
-            `文案泄露了第 ${j + 1} 题（${e.display} / ${other.type}）的答案：` +
-            `${leaks.map((x) => JSON.stringify(x)).join('、')}`));
-        }
-      }
-    });
-  });
-
-  return { ok: v.length === 0, violations: v };
-}
-
-function compileSpec(spec) {
-  const { ok, violations } = checkSpec(spec);
-  if (!ok) {
-    const err = new Error(`规格未过闸（${violations.length} 条）`);
-    err.violations = violations;
-    throw err;
-  }
-
-  return {
-    benchId: spec.benchId,
-    title: spec.title ?? spec.benchId,
-    tasks: spec.tasks.map((task) => {
-      const entry = getEntry(task.moleculeId);
-      const derived = deriveGeometry(entry.formula);
-      const base = {
-        type: task.type,
-        objectiveId: TASK_TYPES[task.type].objective,
-        moleculeId: entry.id,
-        display: entry.display,
-        prompt: task.prompt,
-        hints: task.hints,
-      };
-
-      if (task.type === 'name_geometry') {
-        return {
-          ...base,
-          options: seededShuffle(buildGeometryOptions(derived), `${entry.id}:name`),
-        };
-      }
-      if (task.type === 'compression_direction') {
-        return {
-          ...base,
-          options: seededShuffle([
-            { key: 'below_ideal', zh: '小于理想键角' },
-            { key: 'equal_ideal', zh: '等于理想键角' },
-            { key: 'above_ideal', zh: '大于理想键角' },
-          ], `${entry.id}:compression`),
-        };
-      }
-      if (task.type === 'read_angle') {
-        return { ...base, acceptableAngles: acceptableAngles(entry.id) };
-      }
-      return { ...base, maxDomains: 6 };
-    }),
-  };
-}
-
-function seededShuffle(items, seed) {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i += 1) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  const out = [...items];
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    h = Math.imul(h ^ (h >>> 15), 2246822507);
-    h = Math.imul(h ^ (h >>> 13), 3266489909);
-    const j = ((h >>> 0) % (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
-function buildGeometryOptions(derived) {
-  const correct = derived.molecularGeometry;
-  const keys = new Set([correct.key]);
-  const options = [{ key: correct.key, zh: correct.zh }];
-
-  if (derived.epgDiffersFromMg && !keys.has(derived.electronPairGeometry.key)) {
-    keys.add(derived.electronPairGeometry.key);
-    options.push({ key: derived.electronPairGeometry.key, zh: derived.electronPairGeometry.zh });
-  }
-
-  for (let e = 0; e <= 3 && options.length < 4; e += 1) {
-    const cand = MOLECULAR_GEOMETRY[`${derived.ligandCount}_${e}`];
-    if (cand && !keys.has(cand.key)) {
-      keys.add(cand.key);
-      options.push({ key: cand.key, zh: cand.zh });
-    }
-  }
-  for (const cand of Object.values(MOLECULAR_GEOMETRY)) {
-    if (options.length >= 4) break;
-    if (!keys.has(cand.key)) {
-      keys.add(cand.key);
-      options.push({ key: cand.key, zh: cand.zh });
-    }
-  }
-  return options;
-}
-
-
 const BG = '#0f1420';
 
 const ELEMENT_COLOR = {
@@ -1519,6 +487,1053 @@ class MoleculeView {
     }
     return hit / (data.length / 4);
   }
+}
+
+
+
+const CATALOG = [
+  {
+    id: 'CH4',
+    display: 'CH₄',
+    formula: { central: 'C', ligand: 'H', n: 4, charge: 0 },
+    observedAngles: [{ pair: 'H-C-H', deg: 109.5, source: 'symmetry' }],
+    teachingTags: ['baseline_no_lone_pair'],
+    reviewedBy: null,
+  },
+  {
+    id: 'NH3',
+    display: 'NH₃',
+    formula: { central: 'N', ligand: 'H', n: 3, charge: 0 },
+    observedAngles: [{ pair: 'H-N-H', deg: 106.7, source: 'experimental' }],
+    teachingTags: ['epg_vs_mg', 'lone_pair_compression'],
+    reviewedBy: null,
+  },
+  {
+    id: 'H2O',
+    display: 'H₂O',
+    formula: { central: 'O', ligand: 'H', n: 2, charge: 0 },
+    observedAngles: [{ pair: 'H-O-H', deg: 104.5, source: 'experimental' }],
+    teachingTags: ['epg_vs_mg', 'lone_pair_compression'],
+    reviewedBy: null,
+  },
+  {
+    id: 'CO2',
+    display: 'CO₂',
+    formula: { central: 'C', ligand: 'O', n: 2, charge: 0 },
+    observedAngles: [{ pair: 'O-C-O', deg: 180, source: 'symmetry' }],
+    teachingTags: ['multiple_bond_one_domain'],
+    reviewedBy: null,
+  },
+  {
+    id: 'BF3',
+    display: 'BF₃',
+    formula: { central: 'B', ligand: 'F', n: 3, charge: 0 },
+    observedAngles: [{ pair: 'F-B-F', deg: 120, source: 'symmetry' }],
+    teachingTags: ['electron_deficient', 'baseline_no_lone_pair'],
+    reviewedBy: null,
+  },
+  {
+    id: 'SO2',
+    display: 'SO₂',
+    formula: { central: 'S', ligand: 'O', n: 2, charge: 0 },
+    observedAngles: [{ pair: 'O-S-O', deg: 119, source: 'experimental' }],
+    teachingTags: ['epg_vs_mg', 'lone_pair_compression'],
+    reviewedBy: null,
+  },
+  {
+    id: 'XeF4',
+    display: 'XeF₄',
+    formula: { central: 'Xe', ligand: 'F', n: 4, charge: 0 },
+    observedAngles: [{ pair: 'F-Xe-F', deg: 90, source: 'symmetry' }],
+    teachingTags: ['epg_vs_mg', 'expanded_octet', 'lone_pair_placement'],
+    reviewedBy: null,
+  },
+  {
+    id: 'XeF2',
+    display: 'XeF₂',
+    formula: { central: 'Xe', ligand: 'F', n: 2, charge: 0 },
+    observedAngles: [{ pair: 'F-Xe-F', deg: 180, source: 'symmetry' }],
+    teachingTags: ['epg_vs_mg', 'expanded_octet', 'three_lone_pairs_still_linear'],
+    reviewedBy: null,
+  },
+  {
+    id: 'SF6',
+    display: 'SF₆',
+    formula: { central: 'S', ligand: 'F', n: 6, charge: 0 },
+    observedAngles: [{ pair: 'F-S-F', deg: 90, source: 'symmetry' }],
+    teachingTags: ['expanded_octet', 'baseline_no_lone_pair'],
+    reviewedBy: null,
+  },
+  {
+    id: 'PCl5',
+    display: 'PCl₅',
+    formula: { central: 'P', ligand: 'Cl', n: 5, charge: 0 },
+    observedAngles: [
+      { pair: 'Cl-P-Cl (赤道面内)', deg: 120, source: 'symmetry' },
+      { pair: 'Cl-P-Cl (轴向对赤道)', deg: 90, source: 'symmetry' },
+    ],
+    teachingTags: ['expanded_octet', 'two_angle_families'],
+    reviewedBy: null,
+  },
+  {
+    id: 'SF4',
+    display: 'SF₄',
+    formula: { central: 'S', ligand: 'F', n: 4, charge: 0 },
+    observedAngles: null,
+    teachingTags: ['epg_vs_mg', 'lone_pair_placement', 'expanded_octet'],
+    reviewedBy: null,
+  },
+  {
+    id: 'NH4+',
+    display: 'NH₄⁺',
+    formula: { central: 'N', ligand: 'H', n: 4, charge: 1 },
+    observedAngles: [{ pair: 'H-N-H', deg: 109.5, source: 'symmetry' }],
+    teachingTags: ['charged_species', 'baseline_no_lone_pair'],
+    reviewedBy: null,
+  },
+];
+
+const BY_ID = new Map(CATALOG.map((e) => [e.id, e]));
+
+function getEntry(id) {
+  return BY_ID.get(id) ?? null;
+}
+
+const PLACEHOLDER_SIGNATURES = [
+  'todo', 'tbd', 'test', 'x', 'xx', 'xxx', 'n/a', 'na', 'none', 'null', '-', '?',
+  '待补', '待定', '未定', '待签', '签核中', '教研', 'reviewer', 'admin',
+];
+
+function isValidSignature(sig) {
+  if (sig === null || typeof sig !== 'object' || Array.isArray(sig)) return false;
+  const { by, date, source } = sig;
+  const clean = (x) => x.replace(/[\s\u200b-\u200f\u2060\ufeff\u3000]/g, '');
+  if (typeof by !== 'string' || clean(by).length < 2) return false;
+  if (PLACEHOLDER_SIGNATURES.includes(clean(by).toLowerCase())) return false;
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  if (parsed.toISOString().slice(0, 10) !== date) return false;
+  const now = new Date();
+  const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  if (date > todayLocal) return false;
+  if (typeof source !== 'string' || clean(source).length < 4) return false;
+  if (PLACEHOLDER_SIGNATURES.includes(clean(source).toLowerCase())) return false;
+  return true;
+}
+
+function isAngleTaskEligible(entry) {
+  if (!entry || !entry.observedAngles || entry.observedAngles.length === 0) return false;
+  const allSymmetry = entry.observedAngles.every((a) => a.source === 'symmetry');
+  if (allSymmetry) return true;
+  return isValidSignature(entry.reviewedBy);
+}
+
+
+const VALENCE = {
+  H: 1, He: 2,
+  Li: 1, Be: 2, B: 3, C: 4, N: 5, O: 6, F: 7, Ne: 8,
+  Na: 1, Mg: 2, Al: 3, Si: 4, P: 5, S: 6, Cl: 7, Ar: 8,
+  K: 1, Ca: 2, Ga: 3, Ge: 4, As: 5, Se: 6, Br: 7, Kr: 8,
+  Rb: 1, Sr: 2, In: 3, Sn: 4, Sb: 5, Te: 6, I: 7, Xe: 8,
+};
+
+const ELECTRON_PAIR_GEOMETRY = {
+  2: { key: 'linear', zh: '直线形', idealAngles: [180] },
+  3: { key: 'trigonal_planar', zh: '平面三角形', idealAngles: [120] },
+  4: { key: 'tetrahedral', zh: '四面体形', idealAngles: [109.5] },
+  5: { key: 'trigonal_bipyramidal', zh: '三角双锥形', idealAngles: [90, 120] },
+  6: { key: 'octahedral', zh: '正八面体形', idealAngles: [90] },
+};
+
+const MOLECULAR_GEOMETRY = {
+  '2_0': { key: 'linear', zh: '直线形', notation: 'AX2' },
+  '3_0': { key: 'trigonal_planar', zh: '平面三角形', notation: 'AX3' },
+  '2_1': { key: 'bent', zh: '角形', notation: 'AX2E' },
+  '4_0': { key: 'tetrahedral', zh: '四面体形', notation: 'AX4' },
+  '3_1': { key: 'trigonal_pyramidal', zh: '三角锥形', notation: 'AX3E' },
+  '2_2': { key: 'bent', zh: '角形', notation: 'AX2E2' },
+  '5_0': { key: 'trigonal_bipyramidal', zh: '三角双锥形', notation: 'AX5' },
+  '4_1': { key: 'seesaw', zh: '变形四面体形', notation: 'AX4E' },
+  '3_2': { key: 't_shaped', zh: 'T 形', notation: 'AX3E2' },
+  '2_3': { key: 'linear', zh: '直线形', notation: 'AX2E3' },
+  '6_0': { key: 'octahedral', zh: '正八面体形', notation: 'AX6' },
+  '5_1': { key: 'square_pyramidal', zh: '四方锥形', notation: 'AX5E' },
+  '4_2': { key: 'square_planar', zh: '平面四方形', notation: 'AX4E2' },
+};
+
+class VseprError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+function countDomains(formula) {
+  const { central, ligand, n, charge = 0 } = formula;
+
+  if (!Object.prototype.hasOwnProperty.call(VALENCE, central)) {
+    throw new VseprError('UNSUPPORTED_CENTRAL',
+      `中心原子 ${central} 不在主族价电子表内，VSEPR 不适用`);
+  }
+  if (!Object.prototype.hasOwnProperty.call(VALENCE, ligand)) {
+    throw new VseprError('UNSUPPORTED_LIGAND',
+      `配体原子 ${ligand} 不在主族价电子表内`);
+  }
+  if (!Number.isInteger(n) || n < 2 || n > 6) {
+    throw new VseprError('LIGAND_COUNT_RANGE',
+      `配体数须为 2–6 的整数，收到 ${n}`);
+  }
+  if (!Number.isInteger(charge) || Math.abs(charge) > 3) {
+    throw new VseprError('CHARGE_RANGE', `电荷须为 -3–3 的整数，收到 ${charge}`);
+  }
+
+  const totalValence = VALENCE[central] + n * VALENCE[ligand] - charge;
+
+  if (totalValence % 2 !== 0) {
+    throw new VseprError('ODD_ELECTRON',
+      `总价电子数 ${totalValence} 为奇数（自由基），本引擎不处理`);
+  }
+  if (totalValence < 2 * n) {
+    throw new VseprError('INSUFFICIENT_ELECTRONS',
+      `总价电子数 ${totalValence} 不足以形成 ${n} 根单键`);
+  }
+
+  const bondingElectrons = 2 * n;
+  const afterBonds = totalValence - bondingElectrons;
+
+  const perTerminalNeed = ligand === 'H' ? 0 : 6;
+  const terminalNeed = n * perTerminalNeed;
+  const leftover = afterBonds - terminalNeed;
+
+  let lonePairs;
+  let extraBonds = 0;
+  if (leftover >= 0) {
+    if (leftover % 2 !== 0) {
+      throw new VseprError('UNPAIRED_REMAINDER',
+        `中心原子剩余 ${leftover} 个电子无法成对`);
+    }
+    lonePairs = leftover / 2;
+  } else {
+    extraBonds = Math.ceil(-leftover / 2);
+    lonePairs = 0;
+  }
+
+  const stericNumber = n + lonePairs;
+  if (!ELECTRON_PAIR_GEOMETRY[stericNumber]) {
+    throw new VseprError('STERIC_NUMBER_RANGE',
+      `价层电子对数 ${stericNumber} 超出本引擎覆盖的 2–6`);
+  }
+
+  return {
+    ligandCount: n,
+    lonePairs,
+    stericNumber,
+    trace: {
+      totalValence,
+      bondingElectrons,
+      afterBonds,
+      terminalNeed,
+      leftover,
+      extraBonds,
+    },
+  };
+}
+
+function deriveGeometry(formula) {
+  const domains = countDomains(formula);
+  const { ligandCount, lonePairs, stericNumber } = domains;
+
+  const epg = ELECTRON_PAIR_GEOMETRY[stericNumber];
+  const mgKey = `${ligandCount}_${lonePairs}`;
+  const mg = MOLECULAR_GEOMETRY[mgKey];
+
+  if (!mg) {
+    throw new VseprError('GEOMETRY_NOT_TABULATED',
+      `组合 AX${ligandCount}E${lonePairs} 不在分子几何表内`);
+  }
+
+  return {
+    formula,
+    ...domains,
+    electronPairGeometry: epg,
+    molecularGeometry: mg,
+    idealAngles: epg.idealAngles,
+    epgDiffersFromMg: lonePairs > 0 && epg.key !== mg.key,
+    angleCompression: lonePairs > 0 ? 'compressed_below_ideal' : 'none',
+  };
+}
+
+function geometrySignature(derived) {
+  return `${derived.ligandCount}_${derived.lonePairs}`;
+}
+
+
+const S3 = 1 / Math.sqrt(3);
+const COS30 = Math.sqrt(3) / 2;
+
+const DOMAIN_POSITIONS = {
+  2: [[0, 0, 1], [0, 0, -1]],
+  3: [[1, 0, 0], [-0.5, COS30, 0], [-0.5, -COS30, 0]],
+  4: [[S3, S3, S3], [S3, -S3, -S3], [-S3, S3, -S3], [-S3, -S3, S3]],
+  5: [
+    [1, 0, 0], [-0.5, COS30, 0], [-0.5, -COS30, 0], // 赤道位
+    [0, 0, 1], [0, 0, -1],                           // 轴向位
+  ],
+  6: [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]],
+};
+
+const LONE_PAIR_PRIORITY = {
+  2: [0, 1],
+  3: [0, 1, 2],
+  4: [0, 1, 2, 3],
+  5: [0, 1, 2, 3, 4],
+  6: [4, 5, 0, 1, 2, 3],
+};
+
+function layout(ligandCount, lonePairCount) {
+  const sn = ligandCount + lonePairCount;
+  const positions = DOMAIN_POSITIONS[sn];
+  if (!positions) {
+    throw new Error(`价层电子对数 ${sn} 没有对应的理想构型（覆盖 2–6）`);
+  }
+  const priority = LONE_PAIR_PRIORITY[sn];
+  const lpIdx = new Set(priority.slice(0, lonePairCount));
+
+  const lonePairs = [];
+  const ligands = [];
+  positions.forEach((p, i) => {
+    if (lpIdx.has(i)) lonePairs.push(p);
+    else ligands.push(p);
+  });
+  return { ligands, lonePairs, stericNumber: sn };
+}
+
+function angleBetween(a, b) {
+  const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const na = Math.hypot(...a);
+  const nb = Math.hypot(...b);
+  const cos = Math.min(1, Math.max(-1, dot / (na * nb)));
+  return (Math.acos(cos) * 180) / Math.PI;
+}
+
+function ligandAngles(ligands) {
+  const out = [];
+  for (let i = 0; i < ligands.length; i += 1) {
+    for (let j = i + 1; j < ligands.length; j += 1) {
+      out.push(angleBetween(ligands[i], ligands[j]));
+    }
+  }
+  const uniq = [];
+  for (const a of out.sort((x, y) => x - y)) {
+    if (!uniq.some((u) => Math.abs(u - a) < 0.5)) uniq.push(a);
+  }
+  return uniq.map((a) => Math.round(a * 10) / 10);
+}
+
+
+
+
+
+
+const OBJECTIVES = [
+  {
+    id: 'OBJ-1',
+    zh: '由分子式定出价层电子对数与孤对数',
+    detail: '数对电子域，才有后面所有判断',
+  },
+  {
+    id: 'OBJ-2',
+    zh: '区分电子对几何与分子几何',
+    detail: '孤对占据电子域但不出现在分子形状里',
+  },
+  {
+    id: 'OBJ-3',
+    zh: '读出键角，并判断孤对把它压向哪一侧',
+    detail: '孤对斥力大于成键电子对，把键角压到理想值以下；无孤对时键角等于理想值',
+  },
+];
+
+const MISCONCEPTIONS = {
+  EPG_AS_MG: {
+    id: 'EPG_AS_MG',
+    zh: '把电子对几何当成分子几何',
+    evidence: '学生给出的名称正好等于该分子的电子对几何名',
+  },
+  LONE_PAIR_IGNORED: {
+    id: 'LONE_PAIR_IGNORED',
+    zh: '漏数中心原子孤对',
+    evidence: '学生搭出的电子域数等于配体数，孤对被当成不存在',
+  },
+  LONE_PAIR_AS_LIGAND: {
+    id: 'LONE_PAIR_AS_LIGAND',
+    zh: '把孤对当成配体',
+    evidence: '学生的配体数等于正确的电子域总数',
+  },
+  IDEAL_ANGLE_ASSUMED: {
+    id: 'IDEAL_ANGLE_ASSUMED',
+    zh: '直接用理想键角，未考虑孤对压缩',
+    evidence: '存在孤对时学生给出的角度等于电子对几何的理想角',
+  },
+};
+
+const ANGLE_TOLERANCE_CAP_DEG = 2.5;
+const ANGLE_TOLERANCE_FLOOR_DEG = 0.2;
+
+const MEASURABLE_EPS_DEG = 0.6;
+
+function modelAngles(entryId) {
+  const { derived } = truthFor(entryId);
+  return ligandAngles(layout(derived.ligandCount, derived.lonePairs).ligands);
+}
+
+function angleAnswersMeasurable(entryId) {
+  const { entry } = truthFor(entryId);
+  const observed = entry.observedAngles ?? [];
+  if (observed.length === 0) return false;
+  const model = modelAngles(entryId);
+  return observed.every((o) => model.some((m) => Math.abs(m - o.deg) <= MEASURABLE_EPS_DEG));
+}
+
+function acceptableAngles(entryId) {
+  const { entry } = truthFor(entryId);
+  const observed = (entry.observedAngles ?? []).map((a) => a.deg);
+  if (angleAnswersMeasurable(entryId)) return modelAngles(entryId);
+  return observed;
+}
+
+function angleTolerance(entryId) {
+  const { derived } = truthFor(entryId);
+  const pts = [...acceptableAngles(entryId)];
+  if (derived.lonePairs > 0) {
+    for (const d of derived.idealAngles) {
+      if (!pts.some((x) => Math.abs(x - d) < 0.01)) pts.push(d);
+    }
+  }
+  pts.sort((a, b) => a - b);
+  let minSep = Infinity;
+  for (let i = 1; i < pts.length; i += 1) minSep = Math.min(minSep, pts[i] - pts[i - 1]);
+  if (!Number.isFinite(minSep)) return ANGLE_TOLERANCE_CAP_DEG;
+  return Math.min(ANGLE_TOLERANCE_CAP_DEG,
+    Math.max(ANGLE_TOLERANCE_FLOOR_DEG, minSep / 3));
+}
+
+function truthFor(entryId) {
+  const entry = getEntry(entryId);
+  if (!entry) throw new Error(`分子 ${entryId} 不在常数表内`);
+  return { entry, derived: deriveGeometry(entry.formula) };
+}
+
+function gradeDomainBuild(entryId, studentLigands, studentLonePairs) {
+  const { derived } = truthFor(entryId);
+  const correctX = derived.ligandCount;
+  const correctE = derived.lonePairs;
+  const passed = studentLigands === correctX && studentLonePairs === correctE;
+
+  let misconception = null;
+  if (!passed) {
+    if (studentLigands === correctX && studentLonePairs === 0 && correctE > 0) {
+      misconception = MISCONCEPTIONS.LONE_PAIR_IGNORED;
+    } else if (studentLigands === derived.stericNumber && correctE > 0) {
+      misconception = MISCONCEPTIONS.LONE_PAIR_AS_LIGAND;
+    }
+  }
+
+  return {
+    objectiveId: 'OBJ-1',
+    itemId: `${entryId}:build_domains`,
+    passed,
+    guessable: false,
+    expected: { ligands: correctX, lonePairs: correctE, stericNumber: derived.stericNumber },
+    actual: { ligands: studentLigands, lonePairs: studentLonePairs },
+    misconception,
+  };
+}
+
+function gradeGeometryName(entryId, answerKey) {
+  const { derived } = truthFor(entryId);
+  const passed = answerKey === derived.molecularGeometry.key;
+
+  let misconception = null;
+  if (!passed && derived.epgDiffersFromMg
+      && answerKey === derived.electronPairGeometry.key) {
+    misconception = MISCONCEPTIONS.EPG_AS_MG;
+  }
+
+  return {
+    objectiveId: 'OBJ-2',
+    itemId: `${entryId}:name_geometry`,
+    passed,
+    guessable: true,
+    expected: derived.molecularGeometry.key,
+    actual: answerKey,
+    misconception,
+  };
+}
+
+function gradeAngle(entryId, answerDeg) {
+  const { entry, derived } = truthFor(entryId);
+  if (!isAngleTaskEligible(entry)) {
+    return {
+      objectiveId: 'OBJ-3',
+      passed: null,
+      skipped: true,
+      reason: 'ANGLE_NOT_REVIEWED',
+      detail: `${entry.display} 的实验键角未经教研签核，本关不判读数`,
+    };
+  }
+
+  if (typeof answerDeg !== 'number' || !Number.isFinite(answerDeg)) {
+    return {
+      objectiveId: 'OBJ-3',
+      passed: false,
+      expected: { anyOf: acceptableAngles(entryId) },
+      actual: answerDeg,
+      misconception: null,
+    };
+  }
+
+  const acceptable = acceptableAngles(entryId);
+  const tolerance = angleTolerance(entryId);
+  const passed = acceptable.some((deg) => Math.abs(answerDeg - deg) <= tolerance);
+
+  let misconception = null;
+  if (!passed && derived.lonePairs > 0 && derived.idealAngles.length === 1) {
+    const ideal = derived.idealAngles[0];
+    const hitsIdeal = Math.abs(answerDeg - ideal) <= tolerance;
+    const idealIsAcceptable = acceptable.some((a) => Math.abs(a - ideal) < 0.01);
+    const compressed = acceptable.some((a) => a < ideal - 0.01);
+    if (hitsIdeal && !idealIsAcceptable && compressed) {
+      misconception = MISCONCEPTIONS.IDEAL_ANGLE_ASSUMED;
+    }
+  }
+
+  return {
+    objectiveId: 'OBJ-3',
+    itemId: `${entryId}:read_angle`,
+    passed,
+    guessable: true,
+    expected: { anyOf: acceptable, tolerance },
+    actual: answerDeg,
+    misconception,
+  };
+}
+
+function gradeCompressionDirection(entryId, answer) {
+  const { derived } = truthFor(entryId);
+  const expected = derived.lonePairs > 0 ? 'below_ideal' : 'equal_ideal';
+  return {
+    objectiveId: 'OBJ-3',
+    itemId: `${entryId}:compression_direction`,
+    passed: answer === expected,
+    guessable: true,
+    expected,
+    actual: answer,
+    misconception: null,
+  };
+}
+
+function summarize(results) {
+  return OBJECTIVES.map((obj) => {
+    const hits = results.filter((r) => r.objectiveId === obj.id && !r.skipped);
+    const attempted = hits.length;
+    const passed = hits.filter((r) => r.passed === true).length;
+    const latestPassed = hits.length > 0 && hits[hits.length - 1].passed === true;
+
+    const passedHits = hits.filter((r) => r.passed === true);
+    const hasUnguessableEvidence = passedHits.some((r) => r.guessable === false);
+    const guessablePassed = passedHits.filter((r) => r.guessable !== false);
+    const guessableItems = new Set(guessablePassed.map((r, i) => r.itemId ?? `anon-${i}`));
+    const guessableAnswers = new Set(guessablePassed.map((r) => JSON.stringify(r.expected)));
+    const enoughGuessable = guessableItems.size >= 2 && guessableAnswers.size >= 2;
+
+    let state = 'not_started';
+    if (attempted > 0) {
+      if (passed !== attempted) state = latestPassed ? 'recovered' : 'in_progress';
+      else if (hasUnguessableEvidence || enoughGuessable) state = 'met';
+      else state = 'met_provisional';
+    }
+    return {
+      ...obj,
+      attempted,
+      passed,
+      state,
+      misconceptions: [...new Set(hits.filter((r) => r.misconception)
+        .map((r) => r.misconception.id))],
+    };
+  });
+}
+
+function toXapiStatement(actor, entryId, result) {
+  if (result.skipped) {
+    return {
+      actor: { name: actor, objectType: 'Agent' },
+      verb: { id: 'http://adlnet.gov/expapi/verbs/waived', display: { 'zh-CN': 'waived' } },
+      object: {
+        id: `https://cocorobo.cn/bench/vsepr/${entryId}#${result.objectiveId}`,
+        definition: { type: 'http://adlnet.gov/expapi/activities/cmi.interaction' },
+      },
+      result: {
+        extensions: { 'https://cocorobo.cn/xapi/ext/waived-reason': result.reason ?? null },
+      },
+      timestamp: new Date().toISOString(),
+    };
+  }
+  const verb = result.passed === true ? 'answered' : 'attempted';
+  return {
+    actor: { name: actor, objectType: 'Agent' },
+    verb: { id: `http://adlnet.gov/expapi/verbs/${verb}`, display: { 'zh-CN': verb } },
+    object: {
+      id: `https://cocorobo.cn/bench/vsepr/${entryId}#${result.objectiveId}`,
+      definition: { type: 'http://adlnet.gov/expapi/activities/cmi.interaction' },
+    },
+    result: {
+      success: result.passed === true,
+      response: JSON.stringify(result.actual),
+      extensions: {
+        'https://cocorobo.cn/xapi/ext/misconception': result.misconception?.id ?? null,
+        'https://cocorobo.cn/xapi/ext/expected': JSON.stringify(result.expected ?? null),
+      },
+    },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+
+
+
+
+
+const TASK_TYPES = {
+  build_domains: { grader: 'gradeDomainBuild', objective: 'OBJ-1' },
+  name_geometry: { grader: 'gradeGeometryName', objective: 'OBJ-2' },
+  read_angle: { grader: 'gradeAngle', objective: 'OBJ-3' },
+  compression_direction: { grader: 'gradeCompressionDirection', objective: 'OBJ-3' },
+};
+
+const ALLOWED_TASK_KEYS = ['type', 'moleculeId', 'objectiveId', 'prompt', 'hints'];
+const ALLOWED_SPEC_KEYS = ['benchId', 'title', 'tasks', '_note'];
+
+const FULLWIDTH_DIGITS = /[０-９．]/g;
+const CN_NUM = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+
+function normalizeDigits(text) {
+  return text.replace(FULLWIDTH_DIGITS, (c) => (c === '．' ? '.' : String.fromCharCode(c.charCodeAt(0) - 0xfee0)));
+}
+
+function chineseNumerals(text) {
+  const out = [];
+  const re = /[零一二两三四五六七八九十百]+(?:点[零一二两三四五六七八九]+)?/g;
+  for (const m of text.matchAll(re)) {
+    const [intPart, decPart] = m[0].split('点');
+    let section = 0;
+    let digit = 0;
+    let seen = false;
+    for (const ch of intPart) {
+      if (ch === '十') { section += (digit || 1) * 10; digit = 0; seen = true; }
+      else if (ch === '百') { section += (digit || 1) * 100; digit = 0; seen = true; }
+      else if (ch in CN_NUM) { digit = CN_NUM[ch]; seen = true; }
+    }
+    if (!seen) continue;
+    let val = section + digit;
+    if (decPart) {
+      let frac = 0; let scale = 0.1;
+      for (const ch of decPart) { if (ch in CN_NUM) { frac += CN_NUM[ch] * scale; scale /= 10; } }
+      val += frac;
+    }
+    out.push({ value: val, index: m.index, length: m[0].length });
+  }
+  return out;
+}
+
+function chineseNumeralValues(text) {
+  return chineseNumerals(text).map((x) => x.value);
+}
+
+function numbersIn(text) {
+  const norm = normalizeDigits(text);
+  const nums = [...norm.matchAll(/\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
+  return [...nums, ...chineseNumeralValues(norm)];
+}
+
+const KW = '孤对|电子域|配体|成键电子对';
+const NUM = '[0-9０-９零一二两三四五六七八九十]';
+const DOMAIN_COUNT_PATTERN = new RegExp(
+  `(?:(?:${KW})\\s*(?:的)?(?:数|总数|数目)?\\s*(?:是|为|=|有|共)\\s*${NUM})`
+  + `|(?:${NUM}\\s*(?:个|对|组)\\s*(?:${KW}))`);
+
+const HINT_LEVELS = 3;
+const MAX_SPEC_DEPTH = 12;
+
+class Violation {
+  constructor(gate, path, message) {
+    this.gate = gate;
+    this.path = path;
+    this.message = message;
+  }
+  toString() {
+    return `[${this.gate}] ${this.path}: ${this.message}`;
+  }
+}
+
+function checkKeys(node, allowed, path, gate, out) {
+  if (node === null || typeof node !== 'object' || Array.isArray(node)) return;
+  for (const key of Object.keys(node)) {
+    if (!allowed.includes(key)) {
+      out.push(new Violation(gate, `${path}.${key}`,
+        `规格不允许出现字段 ${JSON.stringify(key)}；` +
+        `只允许 ${allowed.join(' / ')}。答案与数值必须由确定层推出`));
+    }
+  }
+}
+
+function checkShape(node, path, out, seen = new WeakSet(), depth = 0) {
+  if (node === null || typeof node !== 'object') return;
+  if (seen.has(node)) {
+    out.push(new Violation('GATE-0', path, '规格存在循环引用'));
+    return;
+  }
+  if (depth > MAX_SPEC_DEPTH) {
+    out.push(new Violation('GATE-0', path, `规格嵌套超过 ${MAX_SPEC_DEPTH} 层`));
+    return;
+  }
+  seen.add(node);
+  const entries = Array.isArray(node)
+    ? node.map((v, i) => [`[${i}]`, v])
+    : Object.entries(node).map(([k, v]) => [`.${k}`, v]);
+  for (const [seg, value] of entries) checkShape(value, `${path}${seg}`, out, seen, depth + 1);
+  seen.delete(node);
+}
+
+function textLeaks(text, taskType, derived, entry, strict = true) {
+  const leaks = hintLeaksAnswer(text, taskType, derived, entry);
+
+  const answerNumbers = new Set(derived.idealAngles);
+  try { for (const a of acceptableAngles(entry.id)) answerNumbers.add(a); } catch { /* 表外分子 */ }
+  for (const a of (entry.observedAngles ?? [])) answerNumbers.add(a.deg);
+  let tol = 1;
+  try { tol = angleTolerance(entry.id); } catch { tol = 1; }
+
+  for (const clause of text.split(/[，。；、！？\n]/)) {
+    if (!clause.trim()) continue;
+    for (const num of numbersWithUnit(clause)) {
+      if (!claimsAngle(clause, num, taskType)) continue;
+      for (const a of answerNumbers) {
+        if (Math.abs(num.value - a) <= tol) {
+          leaks.push(`${num.value}（判分会把它判对，等于答案 ${a}）`);
+        }
+      }
+    }
+  }
+
+  if (strict && taskType === 'build_domains'
+      && DOMAIN_COUNT_PATTERN.test(normalizeDigits(text))) {
+    const counts = new Set([derived.lonePairs, derived.ligandCount, derived.stericNumber]);
+    if (numbersIn(text).some((n) => counts.has(n))) {
+      leaks.push('把电子域计数写在文案里');
+    }
+  }
+  return leaks;
+}
+
+function answerNeedles(taskType, derived, entry) {
+  switch (taskType) {
+    case 'name_geometry': {
+      const zh = derived.molecularGeometry.zh;
+      return [
+        zh,
+        (zh.endsWith('形') && zh.length >= 3) ? zh.slice(0, -1) : null,
+        derived.molecularGeometry.notation,
+        derived.molecularGeometry.key,
+      ];
+    }
+    case 'read_angle':
+      return [];
+    case 'compression_direction':
+      return derived.lonePairs > 0 ? ['小于理想', '压缩'] : ['等于理想'];
+    case 'build_domains':
+      return [
+        `${derived.lonePairs} 对孤对`, `孤对 ${derived.lonePairs}`,
+        `${derived.ligandCount} 个配体`, `配体 ${derived.ligandCount}`,
+        `${derived.stericNumber} 个电子域`, `电子域 ${derived.stericNumber}`,
+      ];
+    default:
+      return [];
+  }
+}
+
+function hintLeaksAnswer(hintText, taskType, derived, entry) {
+  return answerNeedles(taskType, derived, entry).filter((n) => n && hintText.includes(n));
+}
+
+const NON_ANGLE_UNIT = /^\s*(秒|分钟|分|小时|天|号|题|次|页|族|周期|个|人|%|％)/;
+function numbersWithUnit(clause) {
+  const norm = normalizeDigits(clause);
+  const out = [];
+  for (const m of norm.matchAll(/\d+(?:\.\d+)?/g)) {
+    out.push({ value: Number(m[0]), after: norm.slice(m.index + m[0].length) });
+  }
+  for (const c of chineseNumerals(norm)) {
+    out.push({ value: c.value, after: norm.slice(c.index + c.length) });
+  }
+  return out;
+}
+
+function claimsAngle(clause, num, taskType) {
+  if (NON_ANGLE_UNIT.test(num.after)) return false;
+  const hasAngleWord = /键角|夹角|角度|角是/.test(clause);
+  const hasRotate = /旋转|转动|转过|转到/.test(clause);
+  if (hasRotate && !hasAngleWord) return false;
+  if (/^\s*(度|°)/.test(num.after)) return true;
+  if (hasAngleWord) return true;
+  return taskType === 'read_angle' && /量|读/.test(clause);
+}
+
+function checkSpec(spec) {
+  const v = [];
+
+  if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
+    v.push(new Violation('GATE-0', '$', '规格必须是对象'));
+    return { ok: false, violations: v };
+  }
+
+  if (typeof spec.benchId !== 'string' || !spec.benchId) {
+    v.push(new Violation('GATE-0', '$.benchId', '缺少 benchId'));
+  }
+  if (!Array.isArray(spec.tasks) || spec.tasks.length === 0) {
+    v.push(new Violation('GATE-0', '$.tasks', 'tasks 必须是非空数组'));
+    return { ok: false, violations: v };
+  }
+
+  checkShape(spec, '$', v);
+  if (v.some((x) => x.gate === 'GATE-0' && /循环引用|嵌套超过/.test(x.message))) {
+    return { ok: false, violations: v };
+  }
+
+  checkKeys(spec, ALLOWED_SPEC_KEYS, '$', 'GATE-2', v);
+
+  if (spec.title !== undefined && typeof spec.title !== 'string') {
+    v.push(new Violation('GATE-0', '$.title', `title 必须是字符串，收到 ${
+      Array.isArray(spec.title) ? 'array' : typeof spec.title}`));
+  }
+  if (typeof spec.title === 'string') {
+    const titleLeaks = new Set();
+    for (const task of spec.tasks) {
+      if (!task || typeof task !== 'object') continue;
+      const e = getEntry(task.moleculeId);
+      if (!e) continue;
+      let d;
+      try { d = deriveGeometry(e.formula); } catch { continue; }
+      for (const t of Object.keys(TASK_TYPES)) {
+        for (const leak of textLeaks(spec.title, t, d, e)) titleLeaks.add(leak);
+      }
+    }
+    if (titleLeaks.size > 0) {
+      v.push(new Violation('GATE-5', '$.title',
+        `标题泄露答案或携带数值：出现了 ${[...titleLeaks].map((x) => JSON.stringify(x)).join('、')}`));
+    }
+  }
+
+  spec.tasks.forEach((task, i) => {
+    const p = `$.tasks[${i}]`;
+
+    if (task === null || typeof task !== 'object' || Array.isArray(task)) {
+      v.push(new Violation('GATE-0', p, `任务必须是对象，收到 ${
+        Array.isArray(task) ? 'array' : String(task)}`));
+      return;
+    }
+
+    checkKeys(task, ALLOWED_TASK_KEYS, p, 'GATE-2', v);
+
+    if (!Object.prototype.hasOwnProperty.call(TASK_TYPES, task.type)) {
+      v.push(new Violation('GATE-1', `${p}.type`,
+        `未登记的任务类型 ${JSON.stringify(task.type)}；` +
+        `已登记：${Object.keys(TASK_TYPES).join(' / ')}`));
+      return; // 类型未知，后续检查无从谈起
+    }
+
+    const entry = getEntry(task.moleculeId);
+    if (!entry) {
+      v.push(new Violation('GATE-3', `${p}.moleculeId`,
+        `分子 ${JSON.stringify(task.moleculeId)} 不在常数表内`));
+      return;
+    }
+    let derived;
+    try {
+      derived = deriveGeometry(entry.formula);
+    } catch (err) {
+      v.push(new Violation('GATE-3', `${p}.moleculeId`,
+        `确定层无法推导 ${entry.display}：${err.message}`));
+      return;
+    }
+
+    if (task.type === 'read_angle') {
+      if (!isAngleTaskEligible(entry)) {
+        v.push(new Violation('GATE-4', `${p}.type`,
+          `${entry.display} 的键角未经签核或缺值，不得出读数任务`));
+      } else if (!angleAnswersMeasurable(entry.id)) {
+        v.push(new Violation('GATE-4', `${p}.type`,
+          `${entry.display} 的实测键角在理想构型模型上量不出来，出读数题会变成必错题；`
+          + `改用 compression_direction`));
+      }
+    }
+
+    const declared = task.objectiveId;
+    const bound = TASK_TYPES[task.type].objective;
+    if (declared !== undefined && declared !== bound) {
+      v.push(new Violation('GATE-5', `${p}.objectiveId`,
+        `声明的目标 ${declared} 与类型 ${task.type} 绑定的 ${bound} 不一致`));
+    }
+    if (declared !== undefined && !OBJECTIVES.some((o) => o.id === declared)) {
+      v.push(new Violation('GATE-5', `${p}.objectiveId`,
+        `目标 ${declared} 不在 OBJECTIVES 内`));
+    }
+
+    if (!Array.isArray(task.hints) || task.hints.length !== HINT_LEVELS) {
+      v.push(new Violation('GATE-5', `${p}.hints`,
+        `hint 必须恰好 ${HINT_LEVELS} 级，收到 ${
+          Array.isArray(task.hints) ? task.hints.length : typeof task.hints}`));
+    } else {
+      task.hints.forEach((h, hi) => {
+        if (typeof h !== 'string' || h.trim().length === 0) {
+          v.push(new Violation('GATE-5', `${p}.hints[${hi}]`, 'hint 必须是非空字符串'));
+          return;
+        }
+        const leaks = textLeaks(h, task.type, derived, entry, hi < HINT_LEVELS - 1);
+        if (leaks.length > 0) {
+          v.push(new Violation('GATE-5', `${p}.hints[${hi}]`,
+            `hint 泄露答案：出现了 ${leaks.map((s) => JSON.stringify(s)).join('、')}`));
+        }
+      });
+    }
+
+    if (typeof task.prompt !== 'string' || task.prompt.trim().length === 0) {
+      v.push(new Violation('GATE-0', `${p}.prompt`, '缺少任务文案'));
+    } else {
+      const leaks = textLeaks(task.prompt, task.type, derived, entry);
+      if (leaks.length > 0) {
+        v.push(new Violation('GATE-5', `${p}.prompt`,
+          `题干泄露答案或携带数值：出现了 ${leaks.map((s) => JSON.stringify(s)).join('、')}`));
+      }
+    }
+  });
+
+  const usable = spec.tasks
+    .map((t, origIndex) => ({ t, origIndex }))
+    .filter(({ t }) => t && typeof t === 'object' && TASK_TYPES[t.type] && getEntry(t.moleculeId));
+  usable.forEach(({ t: task, origIndex: i }, ii) => {
+    const texts = [task.prompt, ...(Array.isArray(task.hints) ? task.hints : [])]
+      .filter((x) => typeof x === 'string');
+    usable.forEach(({ t: other, origIndex: j }, jj) => {
+      if (jj <= ii) return;
+      const sameMolecule = other.moleculeId === task.moleculeId;
+      const e = getEntry(other.moleculeId);
+      let d;
+      try { d = deriveGeometry(e.formula); } catch { return; }
+      for (const text of texts) {
+        const leaks = sameMolecule
+          ? textLeaks(text, other.type, d, e)
+          : hintLeaksAnswer(text, other.type, d, e);   // 跨分子只查答案名
+        if (leaks.length > 0) {
+          v.push(new Violation('GATE-5', `$.tasks[${i}]`,
+            `文案泄露了第 ${j + 1} 题（${e.display} / ${other.type}）的答案：` +
+            `${leaks.map((x) => JSON.stringify(x)).join('、')}`));
+        }
+      }
+    });
+  });
+
+  return { ok: v.length === 0, violations: v };
+}
+
+function compileSpec(spec) {
+  const { ok, violations } = checkSpec(spec);
+  if (!ok) {
+    const err = new Error(`规格未过闸（${violations.length} 条）`);
+    err.violations = violations;
+    throw err;
+  }
+
+  return {
+    benchId: spec.benchId,
+    title: spec.title ?? spec.benchId,
+    tasks: spec.tasks.map((task) => {
+      const entry = getEntry(task.moleculeId);
+      const derived = deriveGeometry(entry.formula);
+      const base = {
+        type: task.type,
+        objectiveId: TASK_TYPES[task.type].objective,
+        moleculeId: entry.id,
+        display: entry.display,
+        prompt: task.prompt,
+        hints: task.hints,
+      };
+
+      if (task.type === 'name_geometry') {
+        return {
+          ...base,
+          options: seededShuffle(buildGeometryOptions(derived), `${entry.id}:name`),
+        };
+      }
+      if (task.type === 'compression_direction') {
+        return {
+          ...base,
+          options: seededShuffle([
+            { key: 'below_ideal', zh: '小于理想键角' },
+            { key: 'equal_ideal', zh: '等于理想键角' },
+            { key: 'above_ideal', zh: '大于理想键角' },
+          ], `${entry.id}:compression`),
+        };
+      }
+      if (task.type === 'read_angle') {
+        return { ...base, acceptableAngles: acceptableAngles(entry.id) };
+      }
+      return { ...base, maxDomains: 6 };
+    }),
+  };
+}
+
+function seededShuffle(items, seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    const j = ((h >>> 0) % (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function buildGeometryOptions(derived) {
+  const correct = derived.molecularGeometry;
+  const keys = new Set([correct.key]);
+  const options = [{ key: correct.key, zh: correct.zh }];
+
+  if (derived.epgDiffersFromMg && !keys.has(derived.electronPairGeometry.key)) {
+    keys.add(derived.electronPairGeometry.key);
+    options.push({ key: derived.electronPairGeometry.key, zh: derived.electronPairGeometry.zh });
+  }
+
+  for (let e = 0; e <= 3 && options.length < 4; e += 1) {
+    const cand = MOLECULAR_GEOMETRY[`${derived.ligandCount}_${e}`];
+    if (cand && !keys.has(cand.key)) {
+      keys.add(cand.key);
+      options.push({ key: cand.key, zh: cand.zh });
+    }
+  }
+  for (const cand of Object.values(MOLECULAR_GEOMETRY)) {
+    if (options.length >= 4) break;
+    if (!keys.has(cand.key)) {
+      keys.add(cand.key);
+      options.push({ key: cand.key, zh: cand.zh });
+    }
+  }
+  return options;
 }
 
 
