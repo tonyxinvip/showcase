@@ -2093,12 +2093,24 @@ function hwResample(pts, n = 24){
   return out.slice(0, n);
 }
 
+/* 闭合笔画（圈、0、o）的起笔点因人而异，点列按序比对就全错。
+   对策：闭合就把序列旋转到从最上方那点开始，模板与输入用同一规则。 */
+function hwCanonStart(pts){
+  const b = hwBox(pts);
+  const closed = Math.hypot(pts[0].x - pts[pts.length-1].x, pts[0].y - pts[pts.length-1].y)
+                 < Math.max(b.w, b.h) * 0.34;
+  if (!closed) return pts;
+  let top = 0;
+  for (let i = 1; i < pts.length; i++) if (pts[i].y < pts[top].y) top = i;
+  return pts.slice(top).concat(pts.slice(0, top));
+}
+
 // 把整个符号（可能多笔）归一化到单位框，保留长宽比信息另存
 function hwNormalize(strokes){
   const all = strokes.flat();
   const b = hwBox(all);
   const s = Math.max(b.w, b.h) || 1;
-  return strokes.map(st => hwResample(st).map(p => ({ x:(p.x-b.cx)/s + .5, y:(p.y-b.cy)/s + .5 })));
+  return strokes.map(st => hwCanonStart(hwResample(st)).map(p => ({ x:(p.x-b.cx)/s + .5, y:(p.y-b.cy)/s + .5 })));
 }
 
 /* --- 2. 切分：笔画 → 符号 ---
@@ -2115,19 +2127,23 @@ function hwSegment(strokes){
       const ovl  = Math.min(gb.x1, it.b.x1) - Math.max(gb.x0, it.b.x0);
       const minW = Math.min(gb.w, it.b.w) || 1;
       const dt   = Math.abs(it.t - Math.max(...g.map(x => x.t)));
-      // 判据是「几乎完全重合」，不是「有重叠」。
-      // '=' 的两横首尾都对齐，重叠覆盖两者各自的绝大部分；
-      // 分数线只盖住分子分母的一部分，两侧都探出去。
-      // 只看 min 宽度会把分数线和下面那一笔吸成 '='——实测两次都栽在这（合成夹具比例太宽松，
-      // 真手写 150:55 才暴露），所以这里用 max。
+      /* 一维重叠判不了这件事，必须看二维。多笔符号只有两种形状：
+           交叉型  + × x   —— 两笔的包围盒在 x 和 y 上都相交
+           平行型  =  ≡    —— 不相交，但等长、挨得近
+         而分数线 + 分母是「平行但不等长」，正好被平行型的等长条件挡在外面。
+         只用一维重叠会二选一地坏掉：偏松则分数线吸走分母，偏紧则 '+' 被切成两块。
+         两个方向都实测栽过一次，所以这里两条判据并列写死。 */
       const maxW  = Math.max(gb.w, it.b.w) || 1;
       const scale = Math.max(gb.w, gb.h, it.b.w, it.b.h) || 1;
       const vgap  = Math.abs(gb.cy - it.b.cy);
-      if (ovl > maxW * 0.7 && dt < 1200 && vgap < scale * 0.6){
-        g.push(it); merged = true; break;
-      }
-      // 已知边界：'i' '÷' 这类「一大一小」的多笔符号切不出来，
-      // 模板匹配本来也认不准，留给端侧模型解决，不在这里堆启发式。
+      const iy    = Math.min(gb.y1, it.b.y1) - Math.max(gb.y0, it.b.y0);
+      const tol   = scale * 0.05;                       // 收笔早一点也算交叉
+      const cross = ovl > -tol && iy > -tol;
+      const wsim  = Math.min(gb.w, it.b.w) / maxW;
+      const para  = ovl > maxW * 0.7 && wsim > 0.55 && vgap < scale * 0.5;
+      if (dt < 1200 && (cross || para)){ g.push(it); merged = true; break; }
+      // 已知边界：'i' '÷' 这类「一大一小且不交叉」的符号切不出来，
+      // 模板匹配本来也认不准，留给端侧模型，不在这里堆启发式。
     }
     if (!merged) groups.push([it]);
   }
@@ -2157,6 +2173,11 @@ const HW_TEMPLATES = (() => {
     { c:'2', v:'num', strokes:[[...arc(.5,.3,.3,Math.PI,T*0.12), ...line(.72,.42,.15,.95,12), ...line(.15,.95,.9,.95,8)]] },
     { c:'3', v:'num', strokes:[[...arc(.5,.26,.28,Math.PI*1.1,T*0.18), ...arc(.5,.72,.3,Math.PI*1.35,T*0.2)]] },
     { c:'7', v:'num', strokes:[[...line(.05,.05,.9,.05,10), ...line(.9,.05,.35,.98,14)]] },
+    { c:'1', v:'num', strokes:[[...line(.28,.18,.5,0,6), ...line(.5,0,.5,1,18)]] },   // 起笔带小旗的写法
+    { c:'4', v:'num', strokes:[[...line(.62,0,.06,.66,12), ...line(.06,.66,.95,.66,10)], line(.62,.28,.62,1)] },
+    { c:'5', v:'num', strokes:[[...line(.85,.04,.25,.04,7), ...line(.25,.04,.2,.42,6), ...arc(.5,.66,.34,Math.PI*1.15,T*0.16)]] },
+    { c:'6', v:'num', strokes:[[...arc(.5,.66,.34,Math.PI*1.5,Math.PI*1.5+T*0.98), ...line(.5,.32,.78,.02,6)]] },
+    { c:'9', v:'num', strokes:[[...arc(.5,.3,.3,0,T), ...line(.8,.3,.66,1,8)]] },
     { c:'x', v:'var', strokes:[line(0,0,1,1), line(1,0,0,1)] },
     { c:'√', v:'op',  strokes:[[...line(0,.55,.2,.45,6), ...line(.2,.45,.45,1,10), ...line(.45,1,1,0,12)]] },
   ].map(t => ({ ...t, norm: hwNormalize(t.strokes.map(st => st.map(p => ({...p, t:0})))) }));
@@ -2174,11 +2195,14 @@ function hwBaselineRecognizer(sym){
       let d = 0;
       for (let k = 0; k < norm.length; k++){
         const a = norm[perm[k]], b = tpl.norm[k];
-        for (let i = 0; i < a.length; i++) d += Math.hypot(a[i].x-b[i].x, a[i].y-b[i].y);
-        // 反向书写也算同一个形状
-        let dRev = 0;
-        for (let i = 0; i < a.length; i++) dRev += Math.hypot(a[i].x-b[a.length-1-i].x, a[i].y-b[a.length-1-i].y);
-        d += Math.min(0, dRev - d) * 0;
+        // 同一个形状可以正着写也可以反着写（'-' 从右往左划的人不少），两个方向各算一遍取小的。
+        // 原来这段写了但乘了 0，是死代码——实测反向书写的样本 100% 认错，就是它。
+        let fwd = 0, rev = 0;
+        for (let i = 0; i < a.length; i++){
+          fwd += Math.hypot(a[i].x - b[i].x, a[i].y - b[i].y);
+          rev += Math.hypot(a[i].x - b[a.length-1-i].x, a[i].y - b[a.length-1-i].y);
+        }
+        d += Math.min(fwd, rev);
       }
       best = Math.min(best, d / (norm.length * 24));
     }
@@ -2186,7 +2210,8 @@ function hwBaselineRecognizer(sym){
     const ar = (sym.box.w + 1) / (sym.box.h + 1);
     const tb = hwBox(tpl.strokes.flat());
     const tar = (tb.w + .05) / (tb.h + .05);
-    const arPenalty = Math.abs(Math.log(ar / tar)) * 0.12;
+    // '1' 与 '(' 归一化后点列很接近，靠长宽比分开；0.12 太轻，实测 '1' 被判成括号
+    const arPenalty = Math.abs(Math.log(ar / tar)) * 0.3;
     scored.push({ c: tpl.c, v: tpl.v, d: best + arPenalty });
   }
   scored.sort((a,b) => a.d - b.d);
@@ -2194,6 +2219,34 @@ function hwBaselineRecognizer(sym){
   const top = scored[0];
   const conf = Math.max(0, Math.min(1, 1 - top.d * 2.2));
   return { c: top.c, v: top.v, conf, alts: scored.slice(0,4).map(s => ({ c:s.c, v:s.v })) };
+}
+
+/* --- 3.5 语境消歧 ---
+   有些符号在墨迹上就是同一个形状，再好的分类器也分不开：
+   'x'（变量）与 '×'（乘号）都是两条交叉线，'o' 与 '0' 都是一个圈。
+   分开它们靠的不是笔迹，是左右邻居——而邻居只有拿到整串符号才知道。
+   这一层任何通用识别模型都给不了，因为模型看的是单个符号的图。 */
+const HW_AMBIGUOUS = [
+  { pair:['x','×'], pick:(prev, next) => {
+      const isNum = z => z && z.t === 'sym' && z.v === 'num';
+      // 两边都是数字 → 乘号（2×3）；其余情况当变量（x+1、3x、末尾的 x）
+      return (isNum(prev) && isNum(next)) ? { c:'×', v:'op' } : { c:'x', v:'var' };
+    }},
+  { pair:['0','o'], pick:(prev, next) => {
+      const isNum = z => z && z.t === 'sym' && z.v === 'num';
+      return (isNum(prev) || isNum(next) || (!prev && !next)) ? { c:'0', v:'num' } : { c:'o', v:'var' };
+    }},
+];
+function hwDisambiguate(nodes){
+  for (let i = 0; i < nodes.length; i++){
+    const z = nodes[i];
+    if (!z || z.t !== 'sym') continue;
+    const rule = HW_AMBIGUOUS.find(r => r.pair.includes(z.c));
+    if (!rule) continue;
+    const got = rule.pick(nodes[i-1], nodes[i+1]);
+    z.c = got.c; z.v = got.v;
+  }
+  return nodes;
 }
 
 /* --- 4. 结构：符号的二维位置 → AST ---
@@ -2228,11 +2281,17 @@ function hwLayout(syms, recognize){
   const baseSet = (tall.length ? tall : syms).map(s => s.box.cy).sort((a,b)=>a-b);
   const baseline = baseSet[Math.floor(baseSet.length/2)];
 
+  // 先把这一行的符号全认出来，再做语境消歧，最后才谈上下标——
+  // 顺序不能反：消歧要看左右邻居，而邻居得先存在。
+  const flat = syms.map(s => { const r = recognize(s); s.rec = r; return SY(r.c, r.v); });
+  hwDisambiguate(flat);
+  syms.forEach((s, i) => { s.rec = { ...s.rec, c: flat[i].c, v: flat[i].v }; });
+
   const out = [];
-  for (const s of syms){
-    const r = recognize(s);
-    s.rec = r;                                            // 存回去，界面要用来做纠正
-    const node = SY(r.c, r.v);
+  for (let si = 0; si < syms.length; si++){
+    const s = syms[si];
+    const r = s.rec;
+    const node = flat[si];
     const small = s.box.h < medH * 0.72;
     const dy = baseline - s.box.cy;
     // 又小又高 → 上标；又小又低 → 下标。两个条件都要，否则 '(' 会被当上标
@@ -2248,6 +2307,10 @@ function hwLayout(syms, recognize){
   }
   return R(...out);
 }
+
+/* 测量台入口：分类与切分要能分开测，否则一个数字掩盖两类完全不同的失败 */
+window.__hwSegment = hwSegment;
+window.__hwRecognizeSym = sym => hwRecognizer(sym);
 
 /* --- 组装：可插拔的识别器 --- */
 let hwRecognizer = hwBaselineRecognizer;
@@ -2318,7 +2381,9 @@ window.CocoMath = {
   /* 换掉手写分类器。结构解析（哪个是上标、哪个是分子）不在这一层，
      所以换模型不会动到结构——这正是把分类单独切出来的原因。
      fn(sym) → { c, v, conf, alts }；sym.strokes 是归一化前的原始笔画。 */
-  setRecognizer(fn){ if (typeof fn === 'function') hwRecognizer = fn; return this; },
+  // 传函数则换掉，传 null / 不传则恢复内置识别器。
+  // 原来只做前半句，装上的识别器再也拿不掉——宿主想回落到内置的做不到。
+  setRecognizer(fn){ hwRecognizer = (typeof fn === 'function') ? fn : hwBaselineRecognizer; return this; },
   recognizeStrokes(strokes){ const { doc } = hwRecognize(strokes); return { latex: toTex(doc,{notation:'cn'}), semantic: toPlain(doc) }; },
 
   // 不挂界面也能用：宿主批量转换题库时直接调
