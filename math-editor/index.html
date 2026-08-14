@@ -245,6 +245,23 @@ h1{font-size:clamp(22px,3.4vw,30px);margin:0 0 6px;letter-spacing:-.01em;color:v
 .hostout{margin-top:9px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;
   color:var(--muted);word-break:break-all;min-height:2.6em;line-height:1.6}
 .hostout b{color:var(--text)}
+#hwpad{width:100%;height:220px;display:block;border:1.5px solid var(--line-strong);border-radius:10px;
+  background:var(--panel);touch-action:none;cursor:crosshair}
+#hwpad:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.hwrow{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:11px}
+.hwout{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--soft);padding:12px 14px}
+.hwout .lbl2{font-size:11.5px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+.hwpreview{font-family:"Cambria Math","STIX Two Math","Times New Roman",serif;font-size:26px;
+  margin-top:7px;min-height:1.4em;color:var(--text)}
+.hwfix{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px;align-items:center}
+.hwfix .grp2{display:inline-flex;align-items:center;gap:4px;padding:4px 7px;border:1px solid var(--line);
+  border-radius:9px;background:var(--panel)}
+.hwfix .cur{font-family:"Cambria Math","Times New Roman",serif;font-size:17px;min-width:18px;text-align:center;
+  padding:0 3px;border-radius:4px}
+.hwfix .cur.low{background:var(--warnbg);color:var(--rust);font-weight:700}
+.hwfix .alt{border:none;background:var(--soft);border-radius:5px;font:inherit;font-size:13px;
+  font-family:"Cambria Math","Times New Roman",serif;padding:2px 7px;cursor:pointer;color:var(--muted)}
+.hwfix .alt:hover{background:var(--sky);color:var(--blue)}
 .note{font-size:12.5px;color:var(--muted);margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
 .kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;background:var(--soft);
   border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--text)}
@@ -324,7 +341,31 @@ footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-si
 </div>
 
 <div class="card">
-  <h2><span class="n">2</span><span data-i18n="c2.h">同一棵树，四种输出</span></h2>
+  <h2><span class="n">2</span><span data-i18n="hw.h">手写输入</span></h2>
+  <p class="hint" data-i18n="hw.hint">用手指、鼠标或 Apple Pencil 直接写。识别在本机跑完，笔迹不上传。</p>
+
+  <canvas id="hwpad" tabindex="0" aria-label="handwriting"></canvas>
+
+  <div class="hwrow">
+    <button class="btn" id="hw-insert" data-i18n="hw.insert">插入到公式</button>
+    <button class="btn ghost" id="hw-undo" data-i18n="hw.undostroke">撤销一笔</button>
+    <button class="btn ghost" id="hw-clear" data-i18n="hw.clear">清空画布</button>
+    <span class="lab" id="hw-stat"></span>
+  </div>
+
+  <div class="hwout">
+    <span class="lbl2" data-i18n="hw.result">识别结果</span>
+    <div class="hwpreview" id="hwpreview"></div>
+    <div class="hwfix" id="hwfix"></div>
+  </div>
+
+  <p class="note" data-i18n-html="hw.note">手写数学难的不是认字，是<b>认结构</b>——识别器只会说「这里有个 2」，
+  说不出这个 2 是平方还是乘数。结构那一层用的是本页已有的语义树，是自己的；
+  分类那一格是可替换的，接口为 <code>CocoMath.setRecognizer(fn)</code>。</p>
+</div>
+
+<div class="card">
+  <h2><span class="n">3</span><span data-i18n="c2.h">同一棵树，四种输出</span></h2>
   <p class="hint" data-i18n="c2.hint">LaTeX 给排版和试卷，MathML 给读屏和无障碍，UnicodeMath 给 Word/OMML 互通，语义树给判分和数据分析。字符串在这里都是导出物，存储格式是语义树。</p>
   <div class="outs">
     <div class="out"><header><b>LaTeX</b><span class="why" data-i18n="why.tex">排版 / 试卷 / 题库</span><button class="copy" data-c="out-tex" data-i18n="ui.copy">复制</button></header><pre id="out-tex"></pre></div>
@@ -336,7 +377,7 @@ footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-si
 </div>
 
 <div class="card">
-  <h2><span class="n">3</span><span data-i18n="c3.h">确定性判分</span></h2>
+  <h2><span class="n">4</span><span data-i18n="c3.h">确定性判分</span></h2>
   <p class="hint" data-i18n="c3.hint">等价判定走引擎，不走模型。数值抽样加有理数精确比较判「对不对」，结构检查判「形式合不合要求」。
   误因由同一台引擎按错误规则跑一遍导出，不交给模型编。</p>
 
@@ -364,7 +405,7 @@ footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-si
 </div>
 
 <div class="card">
-  <h2><span class="n">4</span><span data-i18n="c4.h">嵌进你自己的系统</span></h2>
+  <h2><span class="n">5</span><span data-i18n="c4.h">嵌进你自己的系统</span></h2>
   <p class="hint" data-i18n="c4.hint">两种接法。同页嵌入拿到实例直接调方法；跨源或需要沙箱时用 iframe 加 postMessage。
     右边那个编辑器就是用左边的代码挂上去的，改一下公式，宿主收到的回调会实时打出来。</p>
 
@@ -1578,6 +1619,10 @@ function probeMisconceptions(srcExpr, stuExpr){
    ========================================================================== */
 const I18N = {
 'zh-CN': {
+  'hw.h':'手写输入', 'hw.strokes':'笔',
+  'hw.hint':'用手指、鼠标或 Apple Pencil 直接写。识别在本机跑完，笔迹不上传，断网也能用。',
+  'hw.insert':'插入到公式','hw.undostroke':'撤销一笔','hw.clear':'清空画布','hw.result':'识别结果',
+  'hw.note':'手写数学难的不是认字，是<b>认结构</b>——识别器只会说「这里有个 2」，说不出这个 2 是平方还是乘数。结构那一层用的是本页已有的语义树，是自己的；分类那一格可替换，接口为 <code>CocoMath.setRecognizer(fn)</code>。当前是零依赖的模板匹配基线，算子准、数字与字母只到能演示的程度，那正是端侧模型要接管的部分。认错的字点一下候选就能改。',
   'ui.theme':'切换深浅色', 'ui.copy':'复制', 'ui.copied':'已复制', 'ui.copyfail':'手动选中复制', 'ui.empty':'（空）',
   'hero.title':'CocoMath · K12 理科公式编辑器',
   'hero.sub':'所见即所得的公式输入，底层是语义树，不是 LaTeX 字符串。同一棵树能按大陆教材、香港 DSE 或国际记号渲染，能导出四种格式，也能直接喂给确定性引擎判分。页面可以直接操作。',
@@ -1637,6 +1682,10 @@ const I18N = {
   's.paren1':'括号','s.paren2':'括号完','s.vec':'向量','s.comb':'的组合数','s.perm':'的排列数','s.choose':'选',
 },
 'zh-HK': {
+  'hw.h':'手寫輸入', 'hw.strokes':'筆',
+  'hw.hint':'用手指、滑鼠或 Apple Pencil 直接寫。識別在本機跑完，筆跡不上傳，斷網也能用。',
+  'hw.insert':'插入到公式','hw.undostroke':'復原一筆','hw.clear':'清除畫布','hw.result':'識別結果',
+  'hw.note':'手寫數學難的不是認字，是<b>認結構</b>——識別器只會說「這裡有個 2」，說不出這個 2 是平方還是乘數。結構那一層用的是本頁已有的語義樹，是自己的；分類那一格可替換，介面為 <code>CocoMath.setRecognizer(fn)</code>。目前是零依賴的模板匹配基線，運算符準、數字與字母只到能演示的程度，那正是端側模型要接管的部分。認錯的字點一下候選就能改。',
   'ui.theme':'切換深淺色', 'ui.copy':'複製', 'ui.copied':'已複製', 'ui.copyfail':'請手動選取複製', 'ui.empty':'（空）',
   'hero.title':'CocoMath · K12 理科公式編輯器',
   'hero.sub':'所見即所得的公式輸入，底層是語義樹，不是 LaTeX 字串。同一棵樹能依大陸教材、香港 DSE 或國際記號呈現，能匯出四種格式，也能直接交給確定性引擎評分。頁面可以直接操作。',
@@ -1696,6 +1745,10 @@ const I18N = {
   's.paren1':'括號','s.paren2':'括號完','s.vec':'向量','s.comb':'的組合數','s.perm':'的排列數','s.choose':'選',
 },
 'en': {
+  'hw.h':'Handwriting input', 'hw.strokes':'strokes',
+  'hw.hint':'Write with a finger, a mouse, or an Apple Pencil. Recognition runs on the device; ink is never uploaded and it works offline.',
+  'hw.insert':'Insert into formula','hw.undostroke':'Undo stroke','hw.clear':'Clear canvas','hw.result':'Recognised as',
+  'hw.note':'The hard part of handwritten maths is not reading the characters, it is <b>reading the structure</b> — a recogniser tells you there is a 2, not whether that 2 is an exponent or a factor. The structure layer here is the page\'s own semantic tree; the classifier is the replaceable part, behind <code>CocoMath.setRecognizer(fn)</code>. The current baseline is dependency-free template matching: solid on operators, only demo-grade on digits and letters — which is exactly the box an on-device model takes over. Tap an alternative to correct a misread symbol.',
   'ui.theme':'Toggle theme', 'ui.copy':'Copy', 'ui.copied':'Copied', 'ui.copyfail':'Select and copy', 'ui.empty':'(empty)',
   'hero.title':'CocoMath · A formula editor for K–12 STEM',
   'hero.sub':'WYSIWYG formula entry backed by a semantic tree, not a LaTeX string. One tree renders in mainland, Hong Kong DSE, or international notation, exports to four formats, and feeds a deterministic grader directly. Everything on this page is live.',
@@ -1995,6 +2048,216 @@ tb.onclick = () => {
   requestAnimationFrame(() => { main.draw(); std.draw(); stu.draw(); });
 };
 
+
+/* ==========================================================================
+   手写识别：笔迹 → 语义树
+   分四步，只有第三步该外包：
+     1 采集   pointer 事件，带压感，Apple Pencil 与手指同一条路径
+     2 切分   把笔画聚成符号（'=' 是两笔，'x' 是两笔，但它们各是一个符号）
+     3 分类   笔画 → 符号。★ 这一格是可插拔的，TF.js 模型到位后换掉它
+     4 结构   符号的二维位置 → AST（分数线、上标、下标）★ 没有现成模型能做这件事
+
+   第 4 步是手写数学真正难的一半，也是别人给不了的：
+   识别器只会告诉你「这里有个 2」，不会告诉你这个 2 是平方还是乘数。
+   ========================================================================== */
+
+/* --- 1. 几何工具 --- */
+const hwBox = pts => {
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for (const p of pts){ x0=Math.min(x0,p.x); y0=Math.min(y0,p.y); x1=Math.max(x1,p.x); y1=Math.max(y1,p.y); }
+  return { x0,y0,x1,y1, w:x1-x0, h:y1-y0, cx:(x0+x1)/2, cy:(y0+y1)/2 };
+};
+const hwPathLen = pts => { let d=0; for(let i=1;i<pts.length;i++) d+=Math.hypot(pts[i].x-pts[i-1].x, pts[i].y-pts[i-1].y); return d; };
+
+// 重采样成定点数，让长短不一的笔画可比
+function hwResample(pts, n = 24){
+  if (pts.length < 2) return Array.from({length:n}, () => ({ x:pts[0]?.x||0, y:pts[0]?.y||0 }));
+  const total = hwPathLen(pts), step = total / (n-1);
+  const out = [pts[0]]; let acc = 0;
+  for (let i = 1; i < pts.length; i++){
+    let d = Math.hypot(pts[i].x-pts[i-1].x, pts[i].y-pts[i-1].y);
+    if (acc + d >= step && d > 0){
+      let prev = pts[i-1];
+      while (acc + d >= step){
+        const t = (step - acc) / d;
+        const np = { x: prev.x + t*(pts[i].x-prev.x), y: prev.y + t*(pts[i].y-prev.y) };
+        out.push(np);
+        d -= (step - acc); acc = 0; prev = np;
+        if (out.length >= n) break;
+      }
+      if (out.length >= n) break;
+      acc = d;
+    } else acc += d;
+  }
+  while (out.length < n) out.push(pts[pts.length-1]);
+  return out.slice(0, n);
+}
+
+// 把整个符号（可能多笔）归一化到单位框，保留长宽比信息另存
+function hwNormalize(strokes){
+  const all = strokes.flat();
+  const b = hwBox(all);
+  const s = Math.max(b.w, b.h) || 1;
+  return strokes.map(st => hwResample(st).map(p => ({ x:(p.x-b.cx)/s + .5, y:(p.y-b.cy)/s + .5 })));
+}
+
+/* --- 2. 切分：笔画 → 符号 ---
+   判据是「水平投影重叠 + 时间接近」。
+   '=' 的两横水平完全重叠且连着写 → 一个符号；
+   '1+2' 的三笔互不重叠 → 三个符号。 */
+function hwSegment(strokes){
+  const items = strokes.map((st,i) => ({ st, i, b: hwBox(st), t: st[0].t }));
+  const groups = [];
+  for (const it of items){
+    let merged = false;
+    for (const g of groups){
+      const gb = hwBox(g.flatMap(x => x.st));
+      const ovl  = Math.min(gb.x1, it.b.x1) - Math.max(gb.x0, it.b.x0);
+      const minW = Math.min(gb.w, it.b.w) || 1;
+      const dt   = Math.abs(it.t - Math.max(...g.map(x => x.t)));
+      // 判据是「几乎完全重合」，不是「有重叠」。
+      // '=' 的两横首尾都对齐，重叠覆盖两者各自的绝大部分；
+      // 分数线只盖住分子分母的一部分，两侧都探出去。
+      // 只看 min 宽度会把分数线和下面那一笔吸成 '='——实测两次都栽在这（合成夹具比例太宽松，
+      // 真手写 150:55 才暴露），所以这里用 max。
+      const maxW  = Math.max(gb.w, it.b.w) || 1;
+      const scale = Math.max(gb.w, gb.h, it.b.w, it.b.h) || 1;
+      const vgap  = Math.abs(gb.cy - it.b.cy);
+      if (ovl > maxW * 0.7 && dt < 1200 && vgap < scale * 0.6){
+        g.push(it); merged = true; break;
+      }
+      // 已知边界：'i' '÷' 这类「一大一小」的多笔符号切不出来，
+      // 模板匹配本来也认不准，留给端侧模型解决，不在这里堆启发式。
+    }
+    if (!merged) groups.push([it]);
+  }
+  return groups
+    .map(g => ({ strokes: g.map(x => x.st), box: hwBox(g.flatMap(x => x.st)), t: Math.min(...g.map(x=>x.t)) }))
+    .sort((a,b) => a.box.x0 - b.box.x0);
+}
+
+/* --- 3. 分类（可插拔的那一格）---
+   基线分类器：模板匹配，模板用代码写死的参数化点列，零依赖零模型。
+   算子类（+ − × ÷ =（）√）几何特征明显，这套够用；
+   数字与字母只能到「能演示」的程度——那正是 TF.js 模型要接管的部分。 */
+const HW_TEMPLATES = (() => {
+  const line = (x0,y0,x1,y1,n=24) => Array.from({length:n},(_,i)=>({x:x0+(x1-x0)*i/(n-1), y:y0+(y1-y0)*i/(n-1)}));
+  const arc  = (cx,cy,r,a0,a1,n=24) => Array.from({length:n},(_,i)=>{const a=a0+(a1-a0)*i/(n-1);return{x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)};});
+  const T = Math.PI*2;
+  return [
+    { c:'-', v:'op',  strokes:[line(0,.5,1,.5)] },
+    { c:'1', v:'num', strokes:[line(.5,0,.5,1)] },
+    { c:'/', v:'op',  strokes:[line(1,0,0,1)] },
+    { c:'+', v:'op',  strokes:[line(.5,0,.5,1), line(0,.5,1,.5)] },
+    { c:'×', v:'op',  strokes:[line(0,0,1,1), line(1,0,0,1)] },
+    { c:'=', v:'rel', strokes:[line(0,.32,1,.32), line(0,.68,1,.68)] },
+    { c:'0', v:'num', strokes:[arc(.5,.5,.45,0,T)] },
+    { c:'(', v:'op',  strokes:[arc(.85,.5,.5,Math.PI*0.72,Math.PI*1.28)] },
+    { c:')', v:'op',  strokes:[arc(.15,.5,.5,-Math.PI*0.28,Math.PI*0.28)] },
+    { c:'2', v:'num', strokes:[[...arc(.5,.3,.3,Math.PI,T*0.12), ...line(.72,.42,.15,.95,12), ...line(.15,.95,.9,.95,8)]] },
+    { c:'3', v:'num', strokes:[[...arc(.5,.26,.28,Math.PI*1.1,T*0.18), ...arc(.5,.72,.3,Math.PI*1.35,T*0.2)]] },
+    { c:'7', v:'num', strokes:[[...line(.05,.05,.9,.05,10), ...line(.9,.05,.35,.98,14)]] },
+    { c:'x', v:'var', strokes:[line(0,0,1,1), line(1,0,0,1)] },
+    { c:'√', v:'op',  strokes:[[...line(0,.55,.2,.45,6), ...line(.2,.45,.45,1,10), ...line(.45,1,1,0,12)]] },
+  ].map(t => ({ ...t, norm: hwNormalize(t.strokes.map(st => st.map(p => ({...p, t:0})))) }));
+})();
+
+function hwBaselineRecognizer(sym){
+  const norm = hwNormalize(sym.strokes);
+  const scored = [];
+  for (const tpl of HW_TEMPLATES){
+    if (tpl.norm.length !== norm.length) continue;              // 笔数不同直接跳过
+    let best = Infinity;
+    // 笔序可能不同，小规模全排列匹配
+    const perms = norm.length === 1 ? [[0]] : norm.length === 2 ? [[0,1],[1,0]] : [norm.map((_,i)=>i)];
+    for (const perm of perms){
+      let d = 0;
+      for (let k = 0; k < norm.length; k++){
+        const a = norm[perm[k]], b = tpl.norm[k];
+        for (let i = 0; i < a.length; i++) d += Math.hypot(a[i].x-b[i].x, a[i].y-b[i].y);
+        // 反向书写也算同一个形状
+        let dRev = 0;
+        for (let i = 0; i < a.length; i++) dRev += Math.hypot(a[i].x-b[a.length-1-i].x, a[i].y-b[a.length-1-i].y);
+        d += Math.min(0, dRev - d) * 0;
+      }
+      best = Math.min(best, d / (norm.length * 24));
+    }
+    // 长宽比作为额外证据：'-' 与 '1' 归一化后点列几乎一样，靠这个分开
+    const ar = (sym.box.w + 1) / (sym.box.h + 1);
+    const tb = hwBox(tpl.strokes.flat());
+    const tar = (tb.w + .05) / (tb.h + .05);
+    const arPenalty = Math.abs(Math.log(ar / tar)) * 0.12;
+    scored.push({ c: tpl.c, v: tpl.v, d: best + arPenalty });
+  }
+  scored.sort((a,b) => a.d - b.d);
+  if (!scored.length) return { c:'?', v:'var', conf:0, alts:[] };
+  const top = scored[0];
+  const conf = Math.max(0, Math.min(1, 1 - top.d * 2.2));
+  return { c: top.c, v: top.v, conf, alts: scored.slice(0,4).map(s => ({ c:s.c, v:s.v })) };
+}
+
+/* --- 4. 结构：符号的二维位置 → AST ---
+   这一步没有现成模型能做。识别器只说「这里有个 2」，
+   是它说不出这个 2 是平方还是乘数。 */
+function hwLayout(syms, recognize){
+  if (!syms.length) return R();
+
+  // 长横线是分数线：明显比周围宽、且几乎水平
+  const medH = [...syms].map(s => s.box.h).sort((a,b)=>a-b)[Math.floor(syms.length/2)] || 1;
+  const bars = syms.filter(s => s.box.h < medH * 0.42 && s.box.w > medH * 1.5);
+
+  // 取最长的一条当主分数线，上下递归
+  if (bars.length){
+    const bar = bars.reduce((a,b) => b.box.w > a.box.w ? b : a);
+    const above = syms.filter(s => s !== bar && s.box.cy < bar.box.cy - medH*0.15
+                                   && s.box.cx > bar.box.x0 - medH*0.3 && s.box.cx < bar.box.x1 + medH*0.3);
+    const below = syms.filter(s => s !== bar && s.box.cy > bar.box.cy + medH*0.15
+                                   && s.box.cx > bar.box.x0 - medH*0.3 && s.box.cx < bar.box.x1 + medH*0.3);
+    if (above.length && below.length){
+      const rest = syms.filter(s => s !== bar && !above.includes(s) && !below.includes(s));
+      const frac = N.frac(hwLayout(above, recognize), hwLayout(below, recognize));
+      const left  = rest.filter(s => s.box.cx <= bar.box.x0);
+      const right = rest.filter(s => s.box.cx >  bar.box.x1);
+      return R(...(left.length ? hwLayout(left, recognize).k : []), frac,
+               ...(right.length ? hwLayout(right, recognize).k : []));
+    }
+  }
+
+  // 基线：用「大个儿」符号的中心中位数定，小的高个儿不参与
+  const tall = syms.filter(s => s.box.h >= medH * 0.6);
+  const baseSet = (tall.length ? tall : syms).map(s => s.box.cy).sort((a,b)=>a-b);
+  const baseline = baseSet[Math.floor(baseSet.length/2)];
+
+  const out = [];
+  for (const s of syms){
+    const r = recognize(s);
+    s.rec = r;                                            // 存回去，界面要用来做纠正
+    const node = SY(r.c, r.v);
+    const small = s.box.h < medH * 0.72;
+    const dy = baseline - s.box.cy;
+    // 又小又高 → 上标；又小又低 → 下标。两个条件都要，否则 '(' 会被当上标
+    if (small && dy > medH * 0.28 && out.length){
+      const prev = out[out.length-1];
+      if (prev.t === 'script' && !prev.sup) prev.sup = R(node);
+      else out[out.length-1] = N.script(R(prev), R(node), null);
+    } else if (small && dy < -medH * 0.28 && out.length){
+      const prev = out[out.length-1];
+      if (prev.t === 'script' && !prev.sub) prev.sub = R(node);
+      else out[out.length-1] = N.script(R(prev), null, R(node));
+    } else out.push(node);
+  }
+  return R(...out);
+}
+
+/* --- 组装：可插拔的识别器 --- */
+let hwRecognizer = hwBaselineRecognizer;
+function hwRecognize(strokes){
+  const syms = hwSegment(strokes);
+  const doc  = hwLayout(syms, hwRecognizer);
+  relink(doc);
+  return { doc, syms };
+}
+
 /* ==========================================================================
    嵌入接口
    两种接法：
@@ -2052,6 +2315,12 @@ window.CocoMath = {
     return api;
   },
 
+  /* 换掉手写分类器。结构解析（哪个是上标、哪个是分子）不在这一层，
+     所以换模型不会动到结构——这正是把分类单独切出来的原因。
+     fn(sym) → { c, v, conf, alts }；sym.strokes 是归一化前的原始笔画。 */
+  setRecognizer(fn){ if (typeof fn === 'function') hwRecognizer = fn; return this; },
+  recognizeStrokes(strokes){ const { doc } = hwRecognize(strokes); return { latex: toTex(doc,{notation:'cn'}), semantic: toPlain(doc) }; },
+
   // 不挂界面也能用：宿主批量转换题库时直接调
   parseLaTeX  : s => toPlain(fromTex(s)),
   latexToMathML: s => `<math xmlns="${MML_NS}">${toMML(fromTex(s))}</math>`,
@@ -2103,6 +2372,7 @@ function setLang(l){
     refreshOutputs(main);
     grade();
     if (window.__repaintEmbed) window.__repaintEmbed();
+    if (window.__hwRerun) window.__hwRerun();
   }
 }
 document.getElementById('langseg').onclick = e => {
@@ -2138,6 +2408,112 @@ if (!EMBED){
   };
   embedded.on('change', paint); paint(embedded);
   window.__repaintEmbed = () => paint(embedded);
+
+  /* ---------- 手写画布 ---------- */
+  const pad = document.getElementById('hwpad');
+  const ctx2 = pad.getContext('2d');
+  let hwStrokes = [], hwCur = null, hwLast = null;
+
+  function hwFit(){
+    const r = pad.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+    pad.width = Math.round(r.width * dpr); pad.height = Math.round(r.height * dpr);
+    ctx2.setTransform(dpr,0,0,dpr,0,0);
+    hwRedraw();
+  }
+  function hwRedraw(){
+    const r = pad.getBoundingClientRect();
+    ctx2.clearRect(0,0,r.width,r.height);
+    // 参考基线，帮人写得平；也让「上标写高一点」这件事变得直观
+    ctx2.save();
+    ctx2.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line').trim() || '#ddd';
+    ctx2.setLineDash([4,6]); ctx2.lineWidth = 1;
+    ctx2.beginPath(); ctx2.moveTo(12, r.height*0.62); ctx2.lineTo(r.width-12, r.height*0.62); ctx2.stroke();
+    ctx2.restore();
+    ctx2.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#000';
+    ctx2.lineCap = 'round'; ctx2.lineJoin = 'round';
+    for (const st of hwStrokes){
+      for (let i = 1; i < st.length; i++){
+        ctx2.beginPath();
+        ctx2.lineWidth = 1.4 + (st[i].p || .5) * 2.6;   // 压感：Apple Pencil 有，手指没有则用默认
+        ctx2.moveTo(st[i-1].x, st[i-1].y); ctx2.lineTo(st[i].x, st[i].y); ctx2.stroke();
+      }
+    }
+  }
+  const hwPt = e => { const r = pad.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top, p: e.pressure || 0, t: e.timeStamp }; };
+
+  pad.addEventListener('pointerdown', e => {
+    pad.setPointerCapture(e.pointerId);
+    hwCur = [hwPt(e)]; hwStrokes.push(hwCur); hwRedraw();
+  });
+  pad.addEventListener('pointermove', e => {
+    if (!hwCur) return;
+    // 合并事件：Pencil 的采样率高于屏幕刷新率，不取会丢点、笔迹发折
+    const pts = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for (const ev of pts) hwCur.push(hwPt(ev));
+    hwRedraw();
+  });
+  const hwEnd = () => { if (!hwCur) return; hwCur = null; hwRun(); };
+  pad.addEventListener('pointerup', hwEnd);
+  pad.addEventListener('pointercancel', hwEnd);
+  pad.addEventListener('pointerleave', hwEnd);
+
+  function hwRun(){
+    const clean = hwStrokes.filter(st => st.length > 1);
+    document.getElementById('hw-stat').textContent =
+      clean.length ? `${clean.length} ${t('hw.strokes')}` : '';
+    if (!clean.length){ hwLast = null; document.getElementById('hwpreview').textContent = '';
+      document.getElementById('hwfix').textContent = ''; return; }
+    hwLast = hwRecognize(clean);
+    const prev = document.getElementById('hwpreview');
+    prev.textContent = '';
+    prev.appendChild(renderRow(hwLast.doc, { notation: main.notation }, false));
+    balanceFracs(prev);
+    hwPaintFix();
+  }
+
+  /* 低置信度时给候选让人点一下改掉。
+     手写识别不可能 100%，能一键改正的 85% 比改不动的 95% 更好用。 */
+  function hwPaintFix(){
+    const box = document.getElementById('hwfix');
+    box.textContent = '';
+    if (!hwLast) return;
+    hwLast.syms.forEach((sym, i) => {
+      const r = sym.rec; if (!r) return;
+      const g = el('span','grp2');
+      const cur = el('span','cur' + (r.conf < 0.55 ? ' low' : ''), r.c);
+      g.appendChild(cur);
+      (r.alts || []).filter(a => a.c !== r.c).slice(0,3).forEach(a => {
+        const b = el('button','alt', a.c);
+        b.onclick = () => {
+          sym.rec = { ...r, c:a.c, v:a.v, conf:1 };
+          hwLast.doc = hwLayout(hwLast.syms, s2 => s2.rec || hwRecognizer(s2));
+          relink(hwLast.doc);
+          const prev = document.getElementById('hwpreview');
+          prev.textContent = ''; prev.appendChild(renderRow(hwLast.doc,{notation:main.notation},false));
+          balanceFracs(prev); hwPaintFix();
+        };
+        g.appendChild(b);
+      });
+      box.appendChild(g);
+    });
+  }
+
+  document.getElementById('hw-insert').onclick = () => {
+    if (!hwLast || !hwLast.doc.k.length) return;
+    main.field.focus(); main.mark();
+    const kids = hwLast.doc.k;
+    main.cur.row.k.splice(main.cur.i, 0, ...kids);
+    main.cur.i += kids.length;
+    relink(main.doc); main.draw();
+    hwStrokes = []; hwRun(); hwRedraw();
+  };
+  document.getElementById('hw-undo').onclick  = () => { hwStrokes.pop(); hwRedraw(); hwRun(); };
+  document.getElementById('hw-clear').onclick = () => { hwStrokes = []; hwRedraw(); hwRun(); };
+  window.__hwRerun = () => { hwRedraw(); hwRun(); };
+  hwFit();
+  addEventListener('resize', hwFit);
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', hwRedraw);
 
   addEventListener('resize', () => { main.placeCaret(); std.placeCaret(); stu.placeCaret(); });
 }
