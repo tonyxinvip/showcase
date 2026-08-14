@@ -1,0 +1,2147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CocoMath · K12 理科公式编辑器</title>
+<meta name="description" content="所见即所得的公式输入，底层是语义树。大陆教材 / 香港 DSE / 国际三套记号一键切换，简繁英三语，支持化学反应式，判分由确定性引擎完成，不经过大模型。可嵌入第三方系统。">
+</head>
+<body>
+<title>CocoMath</title>
+<style>
+:root{
+  --navy:#081B3A; --blue:#2563EB; --blue2:#1D4ED8; --rust:#C2552F;
+  --text:#27364A; --muted:#5F7088; --line:#D9E2EF; --line-strong:#6F91C2;
+  --bg:#F7FAFF; --soft:#EEF6FF; --panel:#FFFFFF; --sky:#DBEAFE;
+  --math:#4F46E5; --chem:#0891B2; --phys:#0E7490;
+  --ok:#0C857A; --bad:#B3391A; --warnbg:#FFF7ED; --okbg:#ECFDF5; --badbg:#FEF2F2;
+  --caret:#2563EB; --sel:#DBEAFE;
+  /* 压在主色上的字：浅色主题是白，深色主题是深底色。有了它就不必为每个控件
+     各写一遍 [data-theme] 反色规则——那些规则会互相打架。 */
+  --on-accent:#FFFFFF;
+  --shadow:0 1px 2px rgba(8,27,58,.06),0 8px 24px rgba(8,27,58,.06);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --navy:#C9DAF6; --blue:#7FB0FF; --blue2:#A6C8FF; --rust:#F0A184;
+  --text:#DCE6F5; --muted:#96A8C2; --line:#26364F; --line-strong:#5C7AA6;
+  --bg:#0A1526; --soft:#122036; --panel:#0F1C30; --sky:#16263E;
+  --math:#A6A0FF; --chem:#5CC8E0; --phys:#5FB6C9;
+  --ok:#5FD9C4; --bad:#FF9B7E; --warnbg:#2A1F14; --okbg:#0F2A25; --badbg:#2B1614;
+  --caret:#7FB0FF; --sel:#1D3557; --on-accent:#0A1526;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+}}
+:root[data-theme="dark"]{
+  --navy:#C9DAF6; --blue:#7FB0FF; --blue2:#A6C8FF; --rust:#F0A184;
+  --text:#DCE6F5; --muted:#96A8C2; --line:#26364F; --line-strong:#5C7AA6;
+  --bg:#0A1526; --soft:#122036; --panel:#0F1C30; --sky:#16263E;
+  --math:#A6A0FF; --chem:#5CC8E0; --phys:#5FB6C9;
+  --ok:#5FD9C4; --bad:#FF9B7E; --warnbg:#2A1F14; --okbg:#0F2A25; --badbg:#2B1614;
+  --caret:#7FB0FF; --sel:#1D3557; --on-accent:#0A1526;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:Inter,system-ui,-apple-system,"PingFang SC","Noto Sans SC",sans-serif;
+  line-height:1.6; -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
+header.top{margin-bottom:26px}
+h1{font-size:clamp(22px,3.4vw,30px);margin:0 0 6px;letter-spacing:-.01em;color:var(--navy)}
+.sub{color:var(--muted);margin:0;font-size:14.5px;max-width:70ch}
+.tagrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tag{font-size:11.5px;padding:3px 9px;border-radius:99px;background:var(--soft);
+  border:1px solid var(--line);color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:18px;margin-bottom:18px;box-shadow:var(--shadow)}
+.card h2{font-size:15px;margin:0 0 3px;color:var(--navy);letter-spacing:.01em}
+.card .hint{font-size:12.5px;color:var(--muted);margin:0 0 14px}
+.card h2 .n{display:inline-block;min-width:20px;height:20px;line-height:20px;text-align:center;
+  background:var(--blue);color:var(--on-accent);border-radius:6px;font-size:11px;margin-right:8px;vertical-align:1px}
+
+/* ---------- 数学字段 ---------- */
+.field{
+  border:1.5px solid var(--line-strong); border-radius:10px; background:var(--panel);
+  padding:18px 16px; min-height:76px; cursor:text; position:relative;
+  overflow-x:auto; overflow-y:hidden; outline:none;
+}
+.field:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px var(--sky)}
+.mroot{font-family:"Cambria Math","STIX Two Math","Latin Modern Math","Times New Roman",Times,serif;
+  font-size:30px;line-height:1.25;white-space:nowrap;display:inline-block;min-width:2px}
+.caret{position:absolute;width:1.6px;background:var(--caret);pointer-events:none;
+  animation:bl 1.05s step-end infinite;border-radius:1px}
+@keyframes bl{0%,100%{opacity:1}50%{opacity:0}}
+/* 光标闪烁对前庭敏感的人是干扰源，关掉动画但保留光标本体 */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important}
+  .caret{animation:none;opacity:1}
+}
+:where(button,[tabindex],.field):focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.field:not(:focus-within) .caret{display:none}
+
+.row{display:inline-block;white-space:nowrap;min-width:1px}
+.row.empty-slot{min-width:.62em;min-height:1em;border-bottom:1.5px dotted var(--line-strong);
+  vertical-align:-.1em;opacity:.75}
+.sym{display:inline-block;padding:0 .012em}
+.sym.var{font-style:italic;padding-right:.045em}
+.sym.num,.sym.up{font-style:normal}
+.sym.op{padding:0 .19em;font-style:normal}
+.sym.op.unary{padding:0 .02em 0 .03em}
+/* 待提交的反斜杠命令：让人看见系统正在等他打完 */
+.sym.cmd{font-style:normal;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.8em;
+  color:var(--blue);background:var(--sky);border-radius:3px;padding:0 .04em}
+.sym.rel{padding:0 .24em;font-style:normal}
+.sym.punc{padding-right:.14em;font-style:normal}
+.fn{font-style:normal;padding-right:.12em}
+.txt{font-family:Inter,system-ui,"PingFang SC","Noto Sans SC",sans-serif;
+  font-size:.66em;font-style:normal;padding:0 .02em;vertical-align:.06em}
+.txt:first-child{padding-left:.14em}
+.txt:last-child{padding-right:.14em}
+
+.frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;
+  font-size:.97em;margin:0 .12em}
+.frac>.num{padding:0 .28em .1em;display:block}
+.frac>.den{padding:.12em .28em 0;display:block;border-top:.055em solid currentColor}
+
+.sqrtb{display:inline-block;position:relative;padding-left:.62em;margin:0 .07em}
+.sqrtb>.radsvg{position:absolute;left:0;top:0;bottom:0;width:.62em;overflow:visible}
+.sqrtb>.radbody{display:inline-block;border-top:.055em solid currentColor;padding:.12em .16em 0 .08em}
+.sqrtb>.radidx{position:absolute;left:.03em;top:-.18em;font-size:.55em;z-index:2}
+
+.delim{display:inline-block;position:relative;padding:0 .34em}
+.delim>.dl,.delim>.dr{position:absolute;top:0;bottom:0;width:.34em;overflow:visible}
+.delim>.dl{left:0}.delim>.dr{right:0}
+.delim>.dbody{display:inline-block;padding:.06em 0}
+
+.scripted{display:inline-block}
+.scripted>.sbase{display:inline-block}
+.scripts{display:inline-flex;flex-direction:column;font-size:.7em;line-height:1.02;
+  align-items:flex-start;position:relative;vertical-align:baseline}
+/* flex 容器的基线取自第一个子项，所以 .scripts 的基线永远是上标的基线。
+   top 要把上标抬到基线之上，下标才会自然落到基线之下。单位是 .scripts 自己的 em（0.7 倍）。 */
+.scripts.only-sup{top:-.62em;margin-right:.06em}
+.scripts.only-sub{top:.3em;margin-right:.06em}
+.scripts.both{top:-.78em;margin-right:.06em}
+.scripts>.ssup{display:block;padding-bottom:.06em}
+.scripts>.ssub{display:block;padding-top:.06em}
+.scripts.pre{margin-right:0;margin-left:.02em;align-items:flex-end}
+
+/* 同 .sqrtb 的做法：inline-block + 绝对定位的记号。
+   若用 inline-flex，容器基线会取第一个子项（那是没有基线的 SVG），整个 AB 会沉到基线以下。 */
+.acc{display:inline-block;position:relative;vertical-align:baseline}
+.acc>.accmark{position:absolute;left:.02em;right:.02em;bottom:100%;height:.3em;margin-bottom:.04em}
+.acc>.accmark svg{overflow:visible;display:block}
+.acc>.accbody{display:inline-block}
+
+.bigop{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 .16em}
+.bigop>.bo{font-size:1.55em;line-height:1;font-style:normal}
+.bigop>.bolim{font-size:.55em;line-height:1.15}
+.bigop.inline-lim>.bo{font-size:1em;font-style:normal}
+
+.arrowc{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 .2em}
+.arrowc>.acond{font-size:.5em;line-height:1.2;white-space:nowrap;padding:0 .2em}
+.arrowc>.abody{font-size:1em;line-height:1;letter-spacing:-.04em}
+.arrowc>.abody svg{display:block;overflow:visible}
+
+.matrix{display:inline-block;position:relative;padding:0 .42em;vertical-align:middle}
+.matrix>.ml,.matrix>.mr{position:absolute;top:0;bottom:0;width:.42em;overflow:visible}
+.matrix>.ml{left:0}.matrix>.mr{right:0}
+.mgrid{display:inline-grid;gap:.12em .62em;padding:.1em 0}
+.mcell{text-align:center;padding:0 .06em}
+.matrix.cases .mgrid{justify-items:start;gap:.24em .5em}
+
+.nodesel{background:var(--sel);border-radius:3px}
+
+/* ---------- 工具面板 ---------- */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:16px 0 10px;border-bottom:1px solid var(--line);padding-bottom:0}
+.tab{background:none;border:none;border-bottom:2px solid transparent;padding:7px 11px;
+  font:inherit;font-size:13px;color:var(--muted);cursor:pointer;border-radius:6px 6px 0 0}
+.tab:hover{background:var(--soft);color:var(--text)}
+.tab[aria-selected="true"]{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
+.pal{display:flex;flex-wrap:wrap;gap:6px;min-height:40px}
+.pal button{
+  font-family:"Cambria Math","STIX Two Math","Times New Roman",serif;font-size:17px;
+  min-width:42px;height:38px;padding:0 9px;background:var(--panel);color:var(--text);
+  border:1px solid var(--line);border-radius:8px;cursor:pointer;display:inline-flex;
+  align-items:center;justify-content:center;gap:2px;transition:.12s;
+}
+.pal button:hover{border-color:var(--blue);background:var(--soft);transform:translateY(-1px)}
+.pal button:active{transform:translateY(0)}
+.pal button .lbl{font-family:Inter,system-ui,"PingFang SC",sans-serif;font-size:11px;color:var(--muted)}
+.pal button.wide{min-width:auto}
+.pal .grp{display:flex;gap:6px;padding-right:10px;margin-right:4px;border-right:1px dashed var(--line)}
+.pal .grp:last-child{border-right:none}
+
+.ctrls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:9px;overflow:hidden}
+.seg button{background:var(--panel);border:none;padding:7px 14px;font:inherit;font-size:12.5px;
+  color:var(--muted);cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--blue);color:var(--on-accent);font-weight:600}
+.lab{font-size:12.5px;color:var(--muted)}
+.btn{background:var(--blue);color:var(--on-accent);border:none;border-radius:9px;padding:8px 15px;
+  font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--blue2)}
+.btn.ghost{background:transparent;color:var(--blue);border:1px solid var(--line-strong);font-weight:500}
+.btn.ghost:hover{background:var(--soft)}
+
+/* ---------- 输出 ---------- */
+.outs{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:12px}
+.out{border:1px solid var(--line);border-radius:10px;background:var(--soft);overflow:hidden}
+.out header{display:flex;justify-content:space-between;align-items:center;padding:7px 11px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+.out header b{font-size:11.5px;font-weight:600;color:var(--navy);letter-spacing:.02em}
+.out header .why{font-size:10.5px;color:var(--muted);font-weight:400}
+.out pre{margin:0;padding:11px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:11.5px;line-height:1.62;white-space:pre-wrap;word-break:break-all;
+  max-height:190px;overflow:auto;color:var(--text)}
+.copy{background:none;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:10.5px;
+  padding:2px 8px;color:var(--muted);cursor:pointer}
+.copy:hover{border-color:var(--blue);color:var(--blue)}
+
+/* ---------- 判分 ---------- */
+.gradegrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:760px){.gradegrid{grid-template-columns:1fr}}
+.gslot label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:600}
+.field.sm{min-height:60px;padding:12px 14px}
+.field.sm .mroot{font-size:23px}
+.verdict{margin-top:14px;border-radius:11px;padding:14px 16px;border:1px solid var(--line);background:var(--soft)}
+.verdict.pass{background:var(--okbg);border-color:var(--ok)}
+.verdict.fail{background:var(--badbg);border-color:var(--bad)}
+.verdict h3{margin:0 0 8px;font-size:14.5px;display:flex;align-items:center;gap:8px}
+.verdict.pass h3{color:var(--ok)}.verdict.fail h3{color:var(--bad)}
+.vline{display:flex;gap:9px;font-size:13px;padding:3px 0;align-items:flex-start}
+.vline .k{color:var(--muted);min-width:82px;flex-shrink:0;font-size:12.5px}
+.vline code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;font-variant-numeric:tabular-nums;
+  background:var(--panel);padding:1px 5px;border-radius:4px;border:1px solid var(--line)}
+.diag{margin-top:10px;padding:11px 13px;background:var(--panel);border-radius:9px;
+  border-left:3px solid var(--rust);font-size:13px}
+.diag b{color:var(--rust)}
+.probes{margin-top:9px;font-size:12px;color:var(--muted)}
+.probes table{border-collapse:collapse;width:100%;margin-top:5px;font-size:12px}
+.probes th,.probes td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.probes th{color:var(--muted);font-weight:600;font-size:11px}
+.probes td.hit{color:var(--rust);font-weight:600}
+.probes code{font-family:ui-monospace,Menlo,Consolas,monospace}
+.preset{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+.preset button{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:6px 12px;font:inherit;font-size:12.5px;color:var(--text);cursor:pointer}
+.preset button:hover{border-color:var(--blue);color:var(--blue)}
+.preset button[aria-pressed="true"]{background:var(--blue);color:var(--on-accent);border-color:var(--blue);font-weight:600}
+
+.gaps{margin-top:12px;padding:9px 13px;border:1px dashed var(--line-strong);border-radius:10px;
+  background:var(--warnbg);font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gaps b{color:var(--rust);font-weight:600;margin-right:2px}
+.gaps span{padding:1px 8px;border-radius:99px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+.embedgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+@media(max-width:860px){.embedgrid{grid-template-columns:1fr}}
+.embedgrid pre{margin:0;background:var(--soft);border:1px solid var(--line);border-radius:10px;
+  padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;
+  line-height:1.66;overflow-x:auto;color:var(--text)}
+.embedgrid pre b{color:var(--blue);font-weight:600}
+.hostbox{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--soft)}
+.hostbox h4{margin:0 0 8px;font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+.hostout{margin-top:9px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;
+  color:var(--muted);word-break:break-all;min-height:2.6em;line-height:1.6}
+.hostout b{color:var(--text)}
+.note{font-size:12.5px;color:var(--muted);margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+.kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;background:var(--soft);
+  border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--text)}
+table.spec{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+table.spec th,table.spec td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.spec th{font-size:11.5px;color:var(--muted);font-weight:600;letter-spacing:.03em;text-transform:uppercase}
+table.spec td.y{color:var(--ok);font-weight:600}
+table.spec td.n{color:var(--muted)}
+.wrapscroll{overflow-x:auto}
+footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.toprail{position:fixed;right:16px;top:16px;z-index:50;display:flex;gap:8px;align-items:center}
+.themebtn{background:var(--panel);border:1px solid var(--line-strong);border-radius:9px;
+  width:38px;height:38px;cursor:pointer;font-size:16px;color:var(--text);box-shadow:var(--shadow);flex:none}
+.langseg{display:inline-flex;border:1px solid var(--line-strong);border-radius:9px;overflow:hidden;
+  box-shadow:var(--shadow);background:var(--panel)}
+.langseg button{background:var(--panel);border:none;border-right:1px solid var(--line);
+  padding:0 11px;height:38px;font:inherit;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.langseg button:last-child{border-right:none}
+.langseg button[aria-pressed="true"]{background:var(--blue);color:var(--on-accent);font-weight:600}
+@media(max-width:560px){.toprail{top:8px;right:8px}.langseg button{padding:0 8px;font-size:11.5px}}
+.wrap{padding-top:56px}
+</style>
+
+<div class="toprail">
+  <div class="langseg" id="langseg" role="group" aria-label="Language">
+    <button data-lang="zh-CN" lang="zh-Hans">简体</button>
+    <button data-lang="zh-HK" lang="zh-Hant-HK">繁體</button>
+    <button data-lang="en" lang="en">EN</button>
+  </div>
+  <button class="themebtn" id="themebtn" data-i18n-title="ui.theme" aria-label="Theme">◐</button>
+</div>
+
+<div class="wrap">
+<header class="top">
+  <h1 data-i18n="hero.title">CocoMath · K12 理科公式编辑器</h1>
+  <p class="sub" data-i18n="hero.sub">所见即所得的公式输入，底层是语义树，不是 LaTeX 字符串。同一棵树能渲染成中式教材记号或国际记号，
+  能导出四种格式，也能直接喂给确定性引擎判分。页面可以直接操作。</p>
+  <div class="tagrow">
+    <span class="tag" data-i18n="tag.ast">语义 AST 内核</span><span class="tag" data-i18n="tag.cn">中式教材记号</span>
+    <span class="tag" data-i18n="tag.chem">化学反应式</span><span class="tag" data-i18n="tag.grade">确定性判分</span>
+    <span class="tag" data-i18n="tag.embed">可嵌入</span><span class="tag" data-i18n="tag.nodep">零外部依赖</span>
+  </div>
+  <div class="gaps">
+    <b data-i18n="gaps.label">这一版还没做到的：</b>
+    <span data-i18n="gaps.hw">手写与拍照识别</span><span data-i18n="gaps.vert">小学竖式与脱式</span>
+    <span data-i18n="gaps.org">有机结构式</span><span data-i18n="gaps.tex">专业级 TeX 断行与字体度量</span>
+    <span data-i18n="gaps.collab">协同编辑</span>
+  </div>
+</header>
+
+<div class="card">
+  <h2><span class="n">1</span><span data-i18n="c1.h">公式输入</span></h2>
+  <p class="hint" data-i18n-html="c1.hint">点进去直接打字。<span class="kbd">/</span> 分数 · <span class="kbd">^</span> 上标 ·
+    <span class="kbd">_</span> 下标 · <span class="kbd">Tab</span> 跳下一格 · <span class="kbd">←→</span> 在树里走 ·
+    <span class="kbd">↑↓</span> 换层 · <span class="kbd">Esc</span> 跳出 ·
+    <span class="kbd">Backspace</span> 语义删除（删分数线会把分子留下）</p>
+
+  <div class="field" id="field" tabindex="0"><span class="mroot" id="mroot"></span><span class="caret" id="caret"></span></div>
+
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="pal" id="pal"></div>
+
+  <div class="ctrls">
+    <span class="lab" data-i18n="nota.label">记号制式</span>
+    <div class="seg" id="notation">
+      <button data-n="cn" aria-pressed="true" data-i18n="nota.cn">大陆教材</button>
+      <button data-n="hk" aria-pressed="false" data-i18n="nota.hk">香港 DSE</button>
+      <button data-n="intl" aria-pressed="false" data-i18n="nota.intl">国际通用</button>
+    </div>
+    <button class="btn ghost" id="btn-undo" data-i18n="btn.undo">撤销</button>
+    <button class="btn ghost" id="btn-clear" data-i18n="btn.clear">清空</button>
+    <button class="btn ghost" id="btn-demo" data-i18n="btn.demo">载入示例</button>
+  </div>
+  <p class="note" data-i18n-html="c1.note">切换制式，第 2 屏的 LaTeX 会跟着变。组合数在大陆教材写作 <i>C</i><sub>n</sub><sup>m</sup>，
+  国际写作 <code>\binom{n}{m}</code>；向量大陆写 <code>\overrightarrow{AB}</code>，国际常写 <code>\vec{AB}</code>。
+  两种写法是同一个语义节点的两种渲染。存进库的是「组合数」这个语义，导出时才决定写成哪种记号。</p>
+</div>
+
+<div class="card">
+  <h2><span class="n">2</span><span data-i18n="c2.h">同一棵树，四种输出</span></h2>
+  <p class="hint" data-i18n="c2.hint">LaTeX 给排版和试卷，MathML 给读屏和无障碍，UnicodeMath 给 Word/OMML 互通，语义树给判分和数据分析。字符串在这里都是导出物，存储格式是语义树。</p>
+  <div class="outs">
+    <div class="out"><header><b>LaTeX</b><span class="why" data-i18n="why.tex">排版 / 试卷 / 题库</span><button class="copy" data-c="out-tex" data-i18n="ui.copy">复制</button></header><pre id="out-tex"></pre></div>
+    <div class="out"><header><b>MathML</b><span class="why" data-i18n="why.mml">读屏 / 无障碍</span><button class="copy" data-c="out-mml" data-i18n="ui.copy">复制</button></header><pre id="out-mml"></pre></div>
+    <div class="out"><header><b>UnicodeMath</b><span class="why" data-i18n="why.uni">Word 线性输入</span><button class="copy" data-c="out-uni" data-i18n="ui.copy">复制</button></header><pre id="out-uni"></pre></div>
+    <div class="out"><header><b data-i18n="out.ast">语义树</b><span class="why" data-i18n="why.ast">判分 / 学情分析</span><button class="copy" data-c="out-ast" data-i18n="ui.copy">复制</button></header><pre id="out-ast"></pre></div>
+  </div>
+  <p class="note"><span data-i18n="c2.speech">读屏朗读（由 MathML 语义推导，非字符串猜测）：</span><b id="out-speech" style="color:var(--text)"></b></p>
+</div>
+
+<div class="card">
+  <h2><span class="n">3</span><span data-i18n="c3.h">确定性判分</span></h2>
+  <p class="hint" data-i18n="c3.hint">等价判定走引擎，不走模型。数值抽样加有理数精确比较判「对不对」，结构检查判「形式合不合要求」。
+  误因由同一台引擎按错误规则跑一遍导出，不交给模型编。</p>
+
+  <div class="preset" id="preset"></div>
+
+  <div class="gradegrid">
+    <div class="gslot"><label data-i18n="lbl.std">标准答案（教师端）</label>
+      <div class="field sm" id="fstd" tabindex="0"><span class="mroot" id="mstd"></span><span class="caret" id="cstd"></span></div></div>
+    <div class="gslot"><label data-i18n="lbl.stu">学生作答（可直接改，实时判）</label>
+      <div class="field sm" id="fstu" tabindex="0"><span class="mroot" id="mstu"></span><span class="caret" id="cstu"></span></div></div>
+  </div>
+
+  <div class="ctrls">
+    <span class="lab" data-i18n="form.label">形式要求</span>
+    <div class="seg" id="formreq">
+      <button data-f="none" aria-pressed="true" data-i18n="form.none">不限</button>
+      <button data-f="simplest" aria-pressed="false" data-i18n="form.simplest">最简分数</button>
+      <button data-f="rational" aria-pressed="false" data-i18n="form.rational">分母有理化</button>
+    </div>
+  </div>
+
+  <div class="verdict" id="verdict"></div>
+  <p class="note" data-i18n="c3.note">编辑器在这条链路上只负责把语义收干净。
+  拿不到语义就判不了分，只能拿字符串比对，那等于没判。</p>
+</div>
+
+<div class="card">
+  <h2><span class="n">4</span><span data-i18n="c4.h">嵌进你自己的系统</span></h2>
+  <p class="hint" data-i18n="c4.hint">两种接法。同页嵌入拿到实例直接调方法；跨源或需要沙箱时用 iframe 加 postMessage。
+    右边那个编辑器就是用左边的代码挂上去的，改一下公式，宿主收到的回调会实时打出来。</p>
+
+  <div class="embedgrid">
+    <pre>&lt;script src="cocomath.js"&gt;&lt;/script&gt;
+
+const ed = CocoMath.<b>mount</b>('#host', {
+  notation: 'cn',           <span style="opacity:.6">// 'cn' 中式教材 · 'intl' 国际</span>
+  value: '\\frac{1}{2}+\\frac{1}{3}'
+});
+
+ed.<b>on</b>('change', e =&gt; {
+  save(e.<b>getLaTeX</b>());      <span style="opacity:.6">// 存回题库</span>
+  a11y(e.<b>getSpeech</b>());     <span style="opacity:.6">// 读屏朗读</span>
+});
+
+<span style="opacity:.6">// 判分：宿主传标准答案，拿回结构化结果</span>
+ed.<b>grade</b>('\\frac{5}{6}', {
+  form: 'simplest',
+  sourceLatex: '\\frac{1}{2}+\\frac{1}{3}'
+});</pre>
+
+    <div class="hostbox">
+      <h4><span data-i18n="c4.host">宿主页面</span> · <code>#host</code></h4>
+      <div id="host"></div>
+      <div class="hostout" id="hostout"></div>
+    </div>
+  </div>
+
+  <p class="note" data-i18n-html="c4.note">不挂界面也能用，宿主批量迁移题库时直接调：
+    <code>CocoMath.parseLaTeX(s)</code> 取语义树、<code>CocoMath.latexToMathML(s)</code> 出无障碍标记、
+    <code>CocoMath.areEquivalent(a, b)</code> 判两个式子等不等价。
+    iframe 接法把本页用 <code>?embed=1</code> 打开，宿主发
+    <code>{type:'cocomath:set', latex}</code>，收 <code>{type:'cocomath:change', …}</code>。</p>
+</div>
+
+<div class="card">
+  <h2 data-i18n="c5.h">这一版有什么、缺什么</h2>
+  <div class="wrapscroll"><table class="spec">
+    <tr><th data-i18n="c5.cap">能力</th><th data-i18n="c5.this">本原型</th><th data-i18n="c5.note">说明</th></tr>
+    <tr><td data-i18n-html="r0.a"></td><td class="y">✓</td><td data-i18n="r0.c"></td></tr>
+    <tr><td data-i18n-html="r1.a"></td><td class="y">✓</td><td data-i18n="r1.c"></td></tr>
+    <tr><td data-i18n-html="r2.a"></td><td class="y">✓</td><td data-i18n="r2.c"></td></tr>
+    <tr><td data-i18n-html="r3.a"></td><td class="y">✓</td><td data-i18n="r3.c"></td></tr>
+    <tr><td data-i18n-html="r4.a"></td><td class="y">✓</td><td data-i18n="r4.c"></td></tr>
+    <tr><td data-i18n-html="r5.a"></td><td class="y">✓</td><td data-i18n="r5.c"></td></tr>
+    <tr><td data-i18n-html="r6.a"></td><td class="n">✗</td><td data-i18n="r6.c"></td></tr>
+    <tr><td data-i18n-html="r7.a"></td><td class="n">✗</td><td data-i18n="r7.c"></td></tr>
+    <tr><td data-i18n-html="r8.a"></td><td class="n">✗</td><td data-i18n="r8.c"></td></tr>
+    <tr><td data-i18n-html="r9.a"></td><td class="n">△</td><td data-i18n="r9.c"></td></tr>
+  </table></div>
+</div>
+
+<footer>
+  <div class="byline">作者：<b>辛海洋</b></div>
+  <div class="pubdate"><time datetime="2026-08-14">2026-08-14</time></div>
+</footer>
+</div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   CocoMath 内核
+   分四层：AST → 渲染 → 编辑（光标/键盘） → 序列化 & 判分
+   设计要点：存储的是语义节点，不是 LaTeX 字符串。
+   「组合数」是一个节点，中式 C_n^m 与国际 \binom{n}{m} 是它的两种渲染。
+   ========================================================================== */
+
+/* ---------- 1. AST 构造 ---------- */
+const R  = (...k) => ({ t:'row', k: k.flat() });
+const SY = (c, v='var') => ({ t:'sym', c, v });
+const N  = {
+  frac : (n=R(), d=R())            => ({ t:'frac', n, d }),
+  sqrt : (b=R(), idx=null)         => ({ t:'sqrt', b, idx }),
+  script:(base, sup=null, sub=null)=> ({ t:'script', base, sup, sub }),
+  delim: (l,r,b=R())               => ({ t:'delim', l, r, b }),
+  acc  : (kind, b=R())             => ({ t:'acc', kind, b }),
+  choose:(kind, n=R(), m=R())      => ({ t:'choose', kind, n, m }),  // 组合/排列数
+  bigop: (op, from=R(), to=null)   => ({ t:'bigop', op, from, to }),
+  lim  : (to=R())                  => ({ t:'lim', to }),
+  arrow: (kind, up=R(), down=R())  => ({ t:'arrow', kind, up, down }), // 化学反应箭头
+  fn   : (name)                    => ({ t:'fn', name }),
+  txt  : (s)                       => ({ t:'txt', s }),
+  matrix:(kind, rows)              => ({ t:'matrix', kind, rows }),
+};
+
+// 每个节点的可编辑子槽，顺序即 Tab/方向键的遍历顺序
+function slots(n){
+  switch(n.t){
+    case 'frac'  : return [n.n, n.d];
+    case 'sqrt'  : return n.idx ? [n.idx, n.b] : [n.b];
+    case 'script': return [n.base, n.sup, n.sub].filter(Boolean);
+    case 'delim' : return [n.b];
+    case 'acc'   : return [n.b];
+    case 'choose': return [n.m, n.n];               // 上标(m)在前，视觉上在上
+    case 'bigop' : return [n.to, n.from].filter(Boolean);
+    case 'lim'   : return [n.to];
+    case 'arrow' : return [n.up, n.down];
+    case 'matrix': return n.rows.flat();
+    default      : return [];
+  }
+}
+/* 一个节点有两种槽顺序，别混用：
+   slots()    视觉从上到下 —— ↑↓ 换层靠它（上标在上，下标在下）
+   tabSlots() 念读顺序     —— Tab 跳格和插入后的落点靠它
+   组合数念作「从 n 个里选 m 个」，先填下标；求和先写下限。两者在这里正好相反。 */
+function tabSlots(n){
+  if (n.t === 'choose') return [n.n, n.m];
+  if (n.t === 'bigop')  return n.to ? [n.from, n.to] : [n.from];
+  return slots(n);
+}
+const firstEditSlot = n => tabSlots(n)[0] || null;
+// 建立父指针（每次结构变更后重建，避免手工维护出错）
+function relink(n, parent=null){
+  n.p = parent;
+  if (n.t === 'row') n.k.forEach(c => relink(c, n));
+  else slots(n).forEach(s => relink(s, n));
+}
+
+/* ---------- 2. 渲染：AST → DOM ---------- */
+const SVGNS = 'http://www.w3.org/2000/svg';
+function svg(vb, d, opt={}){
+  const s = document.createElementNS(SVGNS,'svg');
+  s.setAttribute('viewBox', vb);
+  s.setAttribute('preserveAspectRatio', opt.par || 'none');
+  s.setAttribute('height','100%'); s.setAttribute('width','100%');
+  const p = document.createElementNS(SVGNS,'path');
+  p.setAttribute('d', d);
+  p.setAttribute('fill','none'); p.setAttribute('stroke','currentColor');
+  p.setAttribute('stroke-width', opt.w || '4');
+  p.setAttribute('stroke-linecap','round'); p.setAttribute('stroke-linejoin','round');
+  // 关键：非缩放描边，SVG 被拉高时线宽不变形
+  p.setAttribute('vector-effect','non-scaling-stroke');
+  s.appendChild(p); return s;
+}
+const DELIM_PATH = {
+  '(' : 'M34 2 C10 26 10 74 34 98', ')' : 'M6 2 C30 26 30 74 6 98',
+  '[' : 'M32 2 L8 2 L8 98 L32 98',  ']' : 'M8 2 L32 2 L32 98 L8 98',
+  '{' : 'M34 2 C18 2 22 44 6 50 C22 56 18 98 34 98',
+  '}' : 'M6 2 C22 2 18 44 34 50 C18 56 22 98 6 98',
+  '|' : 'M20 2 L20 98', '‖': 'M12 2 L12 98 M28 2 L28 98',
+  '⌈' : 'M32 2 L8 2 L8 98', '⌉': 'M8 2 L32 2 L32 98', '' : '',
+};
+function el(tag, cls, txt){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (txt != null) e.textContent = txt;
+  return e;
+}
+
+/* 显示字形 ≠ 语义字符：键盘打的是 ASCII '-'，排版必须是数学减号 U+2212。
+   语义保持 '-'，所以 LaTeX / 判分完全不受影响。 */
+const GLYPH = { '-':'−', '*':'⋅', '<=':'≤', '>=':'≥' };
+
+function renderRow(r, opts, emptyable=true){
+  const e = el('span','row');
+  r.k.forEach((c, i) => {
+    const child = render(c, opts);
+    // 前置正负号（行首，或紧跟运算符/关系符/逗号）收窄间距，否则 -b 会排成 - b
+    if (c.t === 'sym' && c.v === 'op' && (c.c === '-' || c.c === '+')){
+      const prev = r.k[i-1];
+      if (!prev || (prev.t === 'sym' && (prev.v === 'op' || prev.v === 'rel' || prev.v === 'punc')))
+        child.classList.add('unary');
+    }
+    e.appendChild(child);
+  });
+  if (!r.k.length && emptyable) e.classList.add('empty-slot');
+  r.el = e; return e;
+}
+
+function render(n, opts){
+  let e;
+  switch(n.t){
+    case 'row': return renderRow(n, opts);
+
+    case 'sym': e = el('span','sym '+n.v, GLYPH[n.c] || n.c); break;
+
+    case 'fn':  e = el('span','fn', n.name); break;
+
+    case 'txt': e = el('span','txt', n.s); break;
+
+    case 'frac': {
+      e = el('span','frac');
+      const nu = el('span','num'), de = el('span','den');
+      nu.appendChild(renderRow(n.n, opts)); de.appendChild(renderRow(n.d, opts));
+      e.append(nu, de); break;
+    }
+
+    case 'sqrt': {
+      e = el('span','sqrtb');
+      const s = svg('0 0 40 100','M2 62 L12 58 L24 96 L38 4', {w:'3.4'});
+      s.classList.add('radsvg');
+      const body = el('span','radbody');
+      body.appendChild(renderRow(n.b, opts));
+      e.append(s, body);
+      if (n.idx){ const ix = el('span','radidx'); ix.appendChild(renderRow(n.idx, opts)); e.appendChild(ix); }
+      break;
+    }
+
+    case 'script': {
+      e = el('span','scripted');
+      const b = el('span','sbase'); b.appendChild(renderRow(n.base, opts, false));
+      const sc = el('span','scripts');
+      sc.classList.add(n.sup && n.sub ? 'both' : n.sup ? 'only-sup' : 'only-sub');
+      if (n.sup){ const u = el('span','ssup'); u.appendChild(renderRow(n.sup, opts)); sc.appendChild(u); }
+      if (n.sub){ const d = el('span','ssub'); d.appendChild(renderRow(n.sub, opts)); sc.appendChild(d); }
+      e.append(b, sc); break;
+    }
+
+    case 'delim': {
+      e = el('span','delim');
+      const L = svg('0 0 40 100', DELIM_PATH[n.l] || '', {w:'3.6'}); L.classList.add('dl');
+      const Rr= svg('0 0 40 100', DELIM_PATH[n.r] || '', {w:'3.6'}); Rr.classList.add('dr');
+      const bd= el('span','dbody'); bd.appendChild(renderRow(n.b, opts));
+      e.append(L, bd, Rr); break;
+    }
+
+    case 'acc': {
+      e = el('span','acc');
+      const m = el('span','accmark');
+      const marks = {
+        vec  : ['0 0 100 24','M2 16 L98 16 M80 4 L98 16 L80 28'],   // 中式 →（长箭头）
+        bar  : ['0 0 100 24','M2 14 L98 14'],
+        hat  : ['0 0 100 24','M10 22 L50 4 L90 22'],
+        dot  : ['0 0 100 24','M48 12 L52 12'],
+        tilde: ['0 0 100 24','M6 16 C22 -2 34 26 50 12 C66 -2 78 26 94 12'],
+      };
+      const [vb, d] = marks[n.kind] || marks.bar;
+      m.appendChild(svg(vb, d, {w: n.kind==='dot' ? '9' : '5'}));
+      const b = el('span','accbody'); b.appendChild(renderRow(n.b, opts, false));
+      e.append(m, b); break;
+    }
+
+    // ★ 差异点：同一个语义节点，两种记号
+    case 'choose': {
+      if (opts.notation === 'intl' && n.kind === 'C'){
+        // 国际：二项式系数 (n over m)
+        e = el('span','delim');
+        const L = svg('0 0 40 100', DELIM_PATH['('], {w:'3.6'}); L.classList.add('dl');
+        const Rr= svg('0 0 40 100', DELIM_PATH[')'], {w:'3.6'}); Rr.classList.add('dr');
+        const bd= el('span','dbody');
+        const st = el('span','frac');
+        const nu = el('span','num'), de = el('span','den');
+        nu.style.borderTop='none'; de.style.borderTop='none';
+        nu.appendChild(renderRow(n.n, opts)); de.appendChild(renderRow(n.m, opts));
+        st.append(nu, de); bd.appendChild(st);
+        e.append(L, bd, Rr);
+      } else if (opts.notation === 'hk'){
+        // 香港 DSE：前置下标 nCr —— 总数写在 C 前面，与大陆的上下标叠放完全不同
+        e = el('span','scripted');
+        const pre = el('span','scripts pre only-sub');
+        const pd  = el('span','ssub'); pd.appendChild(renderRow(n.n, opts)); pre.appendChild(pd);
+        const b   = el('span','sbase'); b.appendChild(el('span','sym up', n.kind === 'C' ? 'C' : 'P'));
+        const post= el('span','scripts only-sub');
+        const qd  = el('span','ssub'); qd.appendChild(renderRow(n.m, opts)); post.appendChild(qd);
+        e.append(pre, b, post);
+      } else {
+        // 大陆教材：C 正体，下标 n 上标 m
+        e = el('span','scripted');
+        const b = el('span','sbase'); b.appendChild(el('span','sym up', n.kind));
+        const sc = el('span','scripts both');
+        const u = el('span','ssup'); u.appendChild(renderRow(n.m, opts));
+        const d = el('span','ssub'); d.appendChild(renderRow(n.n, opts));
+        sc.append(u, d); e.append(b, sc);
+      }
+      break;
+    }
+
+    case 'bigop': {
+      e = el('span','bigop');
+      const to = el('span','bolim'), bo = el('span','bo', n.op), fr = el('span','bolim');
+      if (n.to) to.appendChild(renderRow(n.to, opts));
+      fr.appendChild(renderRow(n.from, opts));
+      if (n.to) e.appendChild(to);
+      e.append(bo, fr); break;
+    }
+
+    case 'lim': {
+      e = el('span','bigop inline-lim');
+      const bo = el('span','bo','lim'), fr = el('span','bolim');
+      fr.appendChild(renderRow(n.to, opts));
+      e.append(bo, fr); break;
+    }
+
+    // ★ 差异点：化学反应箭头，条件写在上下
+    case 'arrow': {
+      e = el('span','arrowc');
+      const up = el('span','acond'), dn = el('span','acond'), bd = el('span','abody');
+      up.appendChild(renderRow(n.up, opts)); dn.appendChild(renderRow(n.down, opts));
+      const P = {
+        '->' : ['0 0 120 20','M2 10 L112 10 M96 3 L116 10 L96 17'],
+        '<=>': ['0 0 120 26','M4 7 L116 7 M100 1 L118 7 M116 19 L4 19 M20 25 L2 19'],
+        '=>' : ['0 0 120 22','M2 7 L110 7 M2 15 L110 15 M96 2 L118 11 L96 20'],
+      };
+      const [vb,d] = P[n.kind] || P['->'];
+      const s = svg(vb, d, {w:'2.2', par:'xMidYMid meet'});
+      s.setAttribute('width','3.2em'); s.setAttribute('height','auto');
+      s.style.width='3.2em'; s.style.height='.8em';
+      bd.appendChild(s);
+      e.append(up, bd, dn); break;
+    }
+
+    case 'matrix': {
+      e = el('span','matrix' + (n.kind==='cases' ? ' cases' : ''));
+      const pair = { p:['(',')'], b:['[',']'], B:['{','}'], v:['|','|'], cases:['{',''], none:['',''] }[n.kind] || ['(',')'];
+      const L = svg('0 0 40 100', DELIM_PATH[pair[0]] || '', {w:'3.6'}); L.classList.add('ml');
+      const Rr= svg('0 0 40 100', DELIM_PATH[pair[1]] || '', {w:'3.6'}); Rr.classList.add('mr');
+      const g = el('span','mgrid');
+      g.style.gridTemplateColumns = `repeat(${n.rows[0].length},auto)`;
+      n.rows.forEach(rw => rw.forEach(c => { const cell = el('span','mcell'); cell.appendChild(renderRow(c, opts)); g.appendChild(cell); }));
+      e.append(L, g, Rr); break;
+    }
+
+    default: e = el('span','sym','?');
+  }
+  n.el = e; return e;
+}
+
+/* ---------- 3. 编辑器实例（可多开：主输入 + 判分两栏） ---------- */
+function Editor(fieldId, rootId, caretId, onChange){
+  const field = document.getElementById(fieldId);
+  const mount = document.getElementById(rootId);
+  const caret = document.getElementById(caretId);
+  const ed = { field, mount, caret, doc: R(), cur:{ row:null, i:0 }, notation:'cn', onChange };
+  ed.cur.row = ed.doc;
+
+  /* 撤销重做。没有 Ctrl+Z 的编辑器老师用两分钟就会放弃——这是易用性的底线，不是加分项。
+     快照存整棵树的深拷贝；光标位置用 allRows 的序号定位，因为这个顺序是确定的。 */
+  ed.undoStack = []; ed.redoStack = []; ed.quiet = false;
+  const cloneNode = n => {
+    if (n.t === 'row') return { t:'row', k:n.k.map(cloneNode) };
+    const o = { ...n }; delete o.el; delete o.p;
+    if (n.t === 'matrix') o.rows = n.rows.map(r => r.map(cloneNode));
+    else for (const key of ['n','d','b','idx','base','sup','sub','from','to','up','down','m'])
+      if (n[key] && typeof n[key] === 'object') o[key] = cloneNode(n[key]);
+    return o;
+  };
+  ed.snapshot = () => ({ doc: cloneNode(ed.doc), row: ed.allRows().indexOf(ed.cur.row), i: ed.cur.i });
+  ed.restore = function(s){
+    ed.doc = s.doc; relink(ed.doc);
+    const rows = ed.allRows();
+    ed.cur.row = rows[s.row] || ed.doc;
+    ed.cur.i = Math.min(s.i, ed.cur.row.k.length);
+    ed.quiet = true; ed.draw(); ed.quiet = false;
+  };
+  ed.mark = function(){                       // 改动之前调，把「改之前的样子」压栈
+    ed.undoStack.push(ed.snapshot());
+    if (ed.undoStack.length > 120) ed.undoStack.shift();
+    ed.redoStack.length = 0;
+  };
+  ed.undo = function(){
+    if (!ed.undoStack.length) return;
+    ed.redoStack.push(ed.snapshot());
+    ed.restore(ed.undoStack.pop());
+    if (ed.onChange) ed.onChange(ed);
+  };
+  ed.redo = function(){
+    if (!ed.redoStack.length) return;
+    ed.undoStack.push(ed.snapshot());
+    ed.restore(ed.redoStack.pop());
+    if (ed.onChange) ed.onChange(ed);
+  };
+
+  ed.draw = function(){
+    relink(ed.doc);
+    mount.textContent = '';
+    mount.appendChild(renderRow(ed.doc, { notation: ed.notation }, false));
+    balanceFracs(mount);
+    ed.placeCaret();
+    if (ed.onChange) ed.onChange(ed);
+  };
+
+  ed.placeCaret = function(){
+    const r = ed.cur.row;
+    if (!r || !r.el) return;
+    const fb = field.getBoundingClientRect();
+    const kids = r.el.children;
+    let x, top, h;
+    if (!kids.length){
+      const b = r.el.getBoundingClientRect();
+      x = b.left; top = b.top; h = b.height || 20;
+    } else if (ed.cur.i <= 0){
+      const b = kids[0].getBoundingClientRect(); x = b.left; top = b.top; h = b.height;
+    } else {
+      const b = kids[Math.min(ed.cur.i, kids.length) - 1].getBoundingClientRect();
+      x = b.right; top = b.top; h = b.height;
+    }
+    h = Math.max(h, 18);
+    caret.style.left   = (x - fb.left + field.scrollLeft) + 'px';
+    caret.style.top    = (top - fb.top + field.scrollTop) + 'px';
+    caret.style.height = h + 'px';
+  };
+
+  /* --- 光标移动 --- */
+  const firstRowIn = (n, last) => { const s = slots(n); return s.length ? s[last ? s.length-1 : 0] : null; };
+
+  ed.left = function(){
+    const c = ed.cur;
+    if (c.i > 0){
+      const prev = c.row.k[c.i-1];
+      const s = slots(prev);
+      if (s.length){ const t = s[s.length-1]; c.row = t; c.i = t.k.length; }
+      else c.i--;
+    } else {
+      const owner = c.row.p;                      // 当前 row 的宿主节点
+      if (!owner) return;
+      const sl = slots(owner), k = sl.indexOf(c.row);
+      if (k > 0){ const t = sl[k-1]; c.row = t; c.i = t.k.length; }
+      else { const pr = owner.p; if (!pr) return; c.row = pr; c.i = pr.k.indexOf(owner); }
+    }
+    ed.placeCaret();
+  };
+
+  ed.right = function(){
+    const c = ed.cur;
+    if (c.i < c.row.k.length){
+      const nx = c.row.k[c.i];
+      const s = slots(nx);
+      if (s.length){ c.row = s[0]; c.i = 0; }
+      else c.i++;
+    } else {
+      const owner = c.row.p; if (!owner) return;
+      const sl = slots(owner), k = sl.indexOf(c.row);
+      if (k < sl.length-1){ c.row = sl[k+1]; c.i = 0; }
+      else { const pr = owner.p; if (!pr) return; c.row = pr; c.i = pr.k.indexOf(owner) + 1; }
+    }
+    ed.placeCaret();
+  };
+
+  // 上下：在同一宿主的槽之间跳（分子↔分母、上标↔下标）
+  ed.vert = function(dir){
+    let r = ed.cur.row;
+    while (r && r.p){
+      const owner = r.p, sl = slots(owner), k = sl.indexOf(r);
+      const tgt = k + (dir === 'up' ? -1 : 1);
+      if (tgt >= 0 && tgt < sl.length){ ed.cur.row = sl[tgt]; ed.cur.i = sl[tgt].k.length; ed.placeCaret(); return; }
+      r = owner.p;
+    }
+  };
+
+  /* --- 插入 --- */
+  ed.insert = function(node, intoFirstSlot=true){
+    ed.mark();
+    ed.cur.row.k.splice(ed.cur.i, 0, node);
+    ed.cur.i++;
+    relink(ed.doc);
+    const s = intoFirstSlot ? firstEditSlot(node) : null;
+    if (s){ ed.cur.row = s; ed.cur.i = s.k.length; }
+    ed.draw();
+  };
+
+  // Tab 在所有可编辑槽之间按文档顺序走 —— 矩阵逐格填写靠它
+  ed.allRows = function(){
+    const out = [];
+    (function walk(n){ if (n.t === 'row'){ out.push(n); n.k.forEach(walk); } else tabSlots(n).forEach(walk); })(ed.doc);
+    return out;
+  };
+  ed.tab = function(back){
+    const rows = ed.allRows(), j = rows.indexOf(ed.cur.row) + (back ? -1 : 1);
+    if (j >= 0 && j < rows.length){ ed.cur.row = rows[j]; ed.cur.i = rows[j].k.length; ed.placeCaret(); }
+  };
+
+  // 取光标前一个「项」：数字/变量/带脚本的整体连成一串，遇运算符或关系符停
+  ed.takeTerm = function(){
+    const k = ed.cur.row.k; let j = ed.cur.i;
+    if (j === 0) return [];
+    const stop = x => x.t === 'sym' && (x.v === 'op' || x.v === 'rel' || x.v === 'punc');
+    let i = j;
+    while (i > 0 && !stop(k[i-1])) i--;
+    if (i === j) return [];
+    const taken = k.splice(i, j - i);
+    ed.cur.i = i;
+    return taken;
+  };
+
+  /* --- 删除 --- */
+  ed.back = function(){
+    const c = ed.cur;
+    ed.mark();
+    if (c.i > 0){
+      const prev = c.row.k[c.i-1];
+      const s = slots(prev);
+      if (s.length){
+        // 语义删除：拆开结构，把内容留在原地（删分数线 → 分子分母铺平）
+        const flat = [];
+        s.forEach(sub => flat.push(...sub.k));
+        c.row.k.splice(c.i-1, 1, ...flat);
+        c.i = c.i - 1 + flat.length;
+      } else { c.row.k.splice(c.i-1, 1); c.i--; }
+      relink(ed.doc); ed.draw(); return;
+    }
+    // 在槽首：整个宿主节点被拆开
+    const owner = c.row.p; if (!owner || !owner.p) return;
+    const pr = owner.p, at = pr.k.indexOf(owner);
+    const flat = []; slots(owner).forEach(sub => flat.push(...sub.k));
+    pr.k.splice(at, 1, ...flat);
+    c.row = pr; c.i = at;
+    relink(ed.doc); ed.draw();
+  };
+
+  /* --- 反斜杠命令输入 ---
+     会 LaTeX 的老师第一反应就是打 \sqrt。没有这条路径，他们得到的是字面字符。
+     提交时直接把 '\'+缓冲 丢给解析器，不另维护一张命令表——多一张表就会和解析器漂移。 */
+  ed.commitCmd = function(){
+    if (!ed.cmd) return;
+    const { buf, row, start } = ed.cmd;
+    ed.cmd = null;
+    if (!buf) return;                                  // 只打了个反斜杠，原样留着
+    const parsed = fromTex('\\' + buf);
+    if (!parsed.k.length) return;                      // 认不出来就别动，让人看见自己打错了
+    row.k.splice(start, buf.length + 1, ...parsed.k);   // 换掉 \ 与字母
+    relink(ed.doc);
+    const only = parsed.k.length === 1 ? parsed.k[0] : null;
+    const slot = only && firstEditSlot(only);
+    if (slot){ ed.cur.row = slot; ed.cur.i = 0; }
+    else { ed.cur.row = row; ed.cur.i = start + parsed.k.length; }
+    ed.draw();
+  };
+
+  /* --- 键盘 --- */
+  const OPS = '+-*/=<>±×÷≠≈≤≥⩽⩾∈∉⊂⊆∪∩→⇌∥⊥∽≅≌';
+  field.addEventListener('keydown', e => {
+    const K = e.key;
+    if (e.metaKey || e.ctrlKey){
+      const k = K.toLowerCase();
+      if (k === 'z' && !e.shiftKey){ e.preventDefault(); ed.undo(); }
+      else if (k === 'y' || (k === 'z' && e.shiftKey)){ e.preventDefault(); ed.redo(); }
+      return;
+    }
+    // 命令模式优先处理，否则字母会被当普通变量吃掉
+    if (ed.cmd){
+      if (/^[a-zA-Z]$/.test(K)){
+        e.preventDefault();
+        ed.cmd.buf += K;
+        ed.cur.row.k.splice(ed.cur.i, 0, SY(K,'cmd')); ed.cur.i++;
+        relink(ed.doc); ed.draw(); return;
+      }
+      if (K === ' ' || K === 'Enter'){ e.preventDefault(); ed.commitCmd(); return; }
+      if (K === 'Escape'){ e.preventDefault(); ed.cmd = null; ed.draw(); return; }
+      if (K === 'Backspace'){
+        e.preventDefault();
+        if (ed.cmd.buf) ed.cmd.buf = ed.cmd.buf.slice(0, -1); else ed.cmd = null;
+        ed.cur.row.k.splice(ed.cur.i - 1, 1); ed.cur.i--;
+        relink(ed.doc); ed.draw(); return;
+      }
+      ed.commitCmd();                                  // 其他键：先提交，再照常处理这一键
+    }
+    if (K === '\\'){
+      e.preventDefault(); ed.mark();
+      ed.cmd = { buf:'', row: ed.cur.row, start: ed.cur.i };
+      ed.cur.row.k.splice(ed.cur.i, 0, SY('\\','cmd')); ed.cur.i++;
+      relink(ed.doc); ed.draw(); return;
+    }
+    if (K === 'ArrowLeft')  { e.preventDefault(); ed.left();  return; }
+    if (K === 'ArrowRight') { e.preventDefault(); ed.right(); return; }
+    if (K === 'ArrowUp')    { e.preventDefault(); ed.vert('up');   return; }
+    if (K === 'ArrowDown')  { e.preventDefault(); ed.vert('down'); return; }
+    if (K === 'Backspace')  { e.preventDefault(); ed.back(); return; }
+    if (K === 'Tab')        { e.preventDefault(); ed.tab(e.shiftKey); return; }
+    if (K === 'Escape'){
+      e.preventDefault();
+      const owner = ed.cur.row.p;
+      if (owner && owner.p){ ed.cur.i = owner.p.k.indexOf(owner) + 1; ed.cur.row = owner.p; ed.placeCaret(); }
+      return;
+    }
+    if (K === '/'){                         // 分数：吃掉前一个项做分子
+      e.preventDefault(); ed.mark();
+      const term = ed.takeTerm();
+      const f = N.frac(R(...term), R());
+      ed.cur.row.k.splice(ed.cur.i, 0, f); ed.cur.i++;
+      relink(ed.doc); ed.cur.row = f.d; ed.cur.i = 0; ed.draw(); return;
+    }
+    if (K === '^' || K === '_'){            // 上/下标：附到前一个原子
+      e.preventDefault(); ed.mark();
+      const k = ed.cur.row.k, i = ed.cur.i;
+      const isSup = K === '^';
+      let sc = null;
+      if (i > 0 && k[i-1].t === 'script'){   // 已有脚本 → 补另一侧
+        sc = k[i-1];
+        if (isSup && !sc.sup) sc.sup = R(); else if (!isSup && !sc.sub) sc.sub = R();
+      } else {
+        const base = i > 0 ? [k.splice(i-1,1)[0]] : [];
+        if (i > 0) ed.cur.i--;
+        sc = N.script(R(...base), isSup ? R() : null, isSup ? null : R());
+        ed.cur.row.k.splice(ed.cur.i, 0, sc); ed.cur.i++;
+      }
+      relink(ed.doc);
+      const tgt = isSup ? sc.sup : sc.sub;
+      ed.cur.row = tgt; ed.cur.i = tgt.k.length; ed.draw(); return;
+    }
+    if (K === ' '){ e.preventDefault(); return; }   // 空格在数学排版里不是字符，间距由结构决定
+    if (K.length === 1){
+      e.preventDefault();
+      let v = 'var';
+      if (/[0-9.]/.test(K)) v = 'num';
+      else if (OPS.includes(K)) v = (K==='='||K==='<'||K==='>') ? 'rel' : 'op';
+      else if (/[,;:]/.test(K)) v = 'punc';
+      else if (/[一-龥]/.test(K)) { ed.insert(N.txt(K), false); return; }
+      ed.insert(SY(K, v), false);
+      return;
+    }
+  });
+
+  field.addEventListener('click', e => {
+    field.focus();
+    // 点击定位：找最近的可编辑 row，并按 x 判断落在第几个子元素之间
+    let target = e.target.closest('.row');
+    if (!target) target = mount.querySelector('.row');
+    const node = findRowByEl(ed.doc, target);
+    if (!node) return;
+    ed.cur.row = node; ed.cur.i = node.k.length;
+    const kids = [...(target.children||[])];
+    for (let j = 0; j < kids.length; j++){
+      const b = kids[j].getBoundingClientRect();
+      if (e.clientX < b.left + b.width/2){ ed.cur.i = j; break; }
+    }
+    ed.placeCaret();
+  });
+  field.addEventListener('focus', () => ed.placeCaret());
+
+  /* 粘贴与复制：老师最常见的动作之一是从题库或同事那里拷一段 LaTeX 过来。
+     贴进来走同一个解析器；复制则吐当前记号制式下的 LaTeX。
+     没有选区，所以复制的是整个式子——这是诚实的行为，不假装支持部分复制。 */
+  field.addEventListener('paste', e => {
+    e.preventDefault();
+    const txt = (e.clipboardData || window.clipboardData || {}).getData?.('text') || '';
+    if (!txt.trim()) return;
+    ed.mark();
+    const parsed = fromTex(txt.trim());
+    ed.cur.row.k.splice(ed.cur.i, 0, ...parsed.k);
+    ed.cur.i += parsed.k.length;
+    relink(ed.doc); ed.draw();
+  });
+  field.addEventListener('copy', e => {
+    e.preventDefault();
+    e.clipboardData.setData('text/plain', toTex(ed.doc, { notation: ed.notation }));
+  });
+  field.addEventListener('blur',  () => { if (ed.cmd) ed.commitCmd(); });
+
+  ed.setDoc = function(d, keepHistory=true){
+    if (keepHistory && ed.doc && ed.doc.k.length) ed.mark();
+    ed.doc = d; relink(ed.doc); ed.cur.row = d; ed.cur.i = d.k.length; ed.draw();
+  };
+  return ed;
+}
+
+function findRowByEl(n, target){
+  if (n.t === 'row'){ if (n.el === target) return n; for (const c of n.k){ const r = findRowByEl(c, target); if (r) return r; } }
+  else { for (const s of slots(n)){ const r = findRowByEl(s, target); if (r) return r; } }
+  return null;
+}
+
+// 分数上下等高 → vertical-align:middle 时分数线正好落在数学轴上
+function balanceFracs(root){
+  root.querySelectorAll('.frac').forEach(f => {
+    const nu = f.querySelector(':scope>.num'), de = f.querySelector(':scope>.den');
+    if (!nu || !de) return;
+    nu.style.paddingTop = de.style.paddingBottom = '';
+    const hn = nu.offsetHeight, hd = de.offsetHeight, diff = Math.abs(hn - hd);
+    if (diff > 1){ if (hn < hd) nu.style.paddingTop = diff+'px'; else de.style.paddingBottom = diff+'px'; }
+  });
+}
+
+/* ---------- 4. 序列化 ---------- */
+const TEX_SYM = {'×':'\\times ','÷':'\\div ','±':'\\pm ','≠':'\\neq ','≈':'\\approx ',
+  '≤':'\\le ','≥':'\\ge ','⩽':'\\leqslant ','⩾':'\\geqslant ','∈':'\\in ','∉':'\\notin ',
+  '⊂':'\\subset ','⊆':'\\subseteq ','∪':'\\cup ','∩':'\\cap ','∅':'\\varnothing ',
+  '∽':'\\backsim ','≌':'\\cong ','∠':'\\angle ','⊙':'\\odot ','△':'\\triangle ',
+  '∥':'\\parallel ','⊥':'\\perp ','∵':'\\because ','∴':'\\therefore ','∞':'\\infty ',
+  'π':'\\pi ','α':'\\alpha ','β':'\\beta ','θ':'\\theta ','λ':'\\lambda ','μ':'\\mu ',
+  'Δ':'\\Delta ','Ω':'\\Omega ','°':'^{\\circ}','↑':'\\uparrow ','↓':'\\downarrow ',
+  '⇌':'\\rightleftharpoons ','→':'\\rightarrow ','·':'\\cdot ','∑':'\\sum ','∫':'\\int '};
+
+function toTex(n, o){
+  const rw = r => r.k.length ? r.k.map(c => toTex(c, o)).join('') : '';
+  const grp = r => { const s = rw(r); return (s.length === 1 || /^\\[a-zA-Z]+ ?$/.test(s)) ? s : '{'+s+'}'; };
+  switch(n.t){
+    // 相邻的中文字符各自是一个节点，导出时合并成一个 \text{}，否则得到 \text{点}\text{燃}
+    case 'row'   : return rw(n).replace(/(?:\\text\{[^{}]*\})+/g,
+                     m => '\\text{' + m.replace(/\\text\{([^{}]*)\}/g, '$1') + '}');
+    case 'sym'   : return TEX_SYM[n.c] || n.c;
+    case 'fn'    : return '\\'+n.name+' ';
+    case 'txt'   : return '\\text{'+n.s+'}';
+    case 'frac'  : return '\\frac{'+rw(n.n)+'}{'+rw(n.d)+'}';
+    case 'sqrt'  : return n.idx ? '\\sqrt['+rw(n.idx)+']{'+rw(n.b)+'}' : '\\sqrt{'+rw(n.b)+'}';
+    case 'script': return rw(n.base) + (n.sub?'_'+grp(n.sub):'') + (n.sup?'^'+grp(n.sup):'');
+    case 'delim' : return '\\left'+(n.l||'.')+rw(n.b)+'\\right'+(n.r||'.');
+    case 'acc'   : return {vec:'\\overrightarrow',bar:'\\overline',hat:'\\hat',dot:'\\dot',tilde:'\\tilde'}[n.kind]+'{'+rw(n.b)+'}';
+    case 'choose':
+      // ★ 同一节点，三套记号：大陆 C_n^m · 香港 DSE nCr · 国际 \binom
+      if (o.notation === 'intl' && n.kind === 'C') return '\\binom{'+rw(n.n)+'}{'+rw(n.m)+'}';
+      if (o.notation === 'hk') return '{}_{'+rw(n.n)+'}\\mathrm{'+(n.kind==='C'?'C':'P')+'}_{'+rw(n.m)+'}';
+      return '\\mathrm{'+n.kind+'}_{'+rw(n.n)+'}^{'+rw(n.m)+'}';
+    case 'bigop' : return (n.op==='∑'?'\\sum':n.op==='∏'?'\\prod':'\\int')+'_{'+rw(n.from)+'}'+(n.to?'^{'+rw(n.to)+'}':'');
+    case 'lim'   : return '\\lim_{'+rw(n.to)+'}';
+    case 'arrow' : {
+      const k = {'->':'\\xrightarrow','<=>':'\\xrightleftharpoons','=>':'\\xRightarrow'}[n.kind];
+      return k+'['+rw(n.down)+']{'+rw(n.up)+'}';
+    }
+    case 'matrix': {
+      const env = {p:'pmatrix',b:'bmatrix',B:'Bmatrix',v:'vmatrix',cases:'cases',none:'matrix'}[n.kind]||'pmatrix';
+      return '\\begin{'+env+'}'+n.rows.map(r=>r.map(c=>rw(c)).join(' & ')).join(' \\\\ ')+'\\end{'+env+'}';
+    }
+  }
+  return '';
+}
+
+function toMML(n){
+  const rw = r => r.k.length ? r.k.map(c => toMML(c)).join('') : '<mi></mi>';
+  const wrap = r => r.k.length === 1 ? toMML(r.k[0]) : '<mrow>'+rw(r)+'</mrow>';
+  switch(n.t){
+    case 'row'   : return rw(n);
+    case 'sym'   : return n.v === 'num' ? `<mn>${esc(n.c)}</mn>`
+                        : (n.v==='op'||n.v==='rel'||n.v==='punc') ? `<mo>${esc(n.c)}</mo>`
+                        : `<mi>${esc(n.c)}</mi>`;
+    case 'fn'    : return `<mi mathvariant="normal">${esc(n.name)}</mi>`;
+    case 'txt'   : return `<mtext>${esc(n.s)}</mtext>`;
+    case 'frac'  : return `<mfrac>${wrap(n.n)}${wrap(n.d)}</mfrac>`;
+    case 'sqrt'  : return n.idx ? `<mroot>${wrap(n.b)}${wrap(n.idx)}</mroot>` : `<msqrt>${rw(n.b)}</msqrt>`;
+    case 'script': return n.sup && n.sub ? `<msubsup>${wrap(n.base)}${wrap(n.sub)}${wrap(n.sup)}</msubsup>`
+                        : n.sup ? `<msup>${wrap(n.base)}${wrap(n.sup)}</msup>`
+                        : `<msub>${wrap(n.base)}${wrap(n.sub)}</msub>`;
+    case 'delim' : return `<mrow><mo stretchy="true">${esc(n.l)}</mo>${rw(n.b)}<mo stretchy="true">${esc(n.r)}</mo></mrow>`;
+    case 'acc'   : return `<mover accent="true">${wrap(n.b)}<mo stretchy="true">${{vec:'&#x2192;',bar:'&#x00AF;',hat:'&#x005E;',dot:'&#x02D9;',tilde:'&#x007E;'}[n.kind]}</mo></mover>`;
+    case 'choose': return `<msubsup><mi mathvariant="normal">${n.kind}</mi>${wrap(n.n)}${wrap(n.m)}</msubsup>`;
+    case 'bigop' : return `<munderover><mo>${esc(n.op)}</mo>${wrap(n.from)}${n.to?wrap(n.to):'<mi></mi>'}</munderover>`;
+    case 'lim'   : return `<munder><mo movablelimits="true">lim</mo>${wrap(n.to)}</munder>`;
+    case 'arrow' : return `<munderover><mo stretchy="true">${n.kind==='<=>'?'&#x21CC;':'&#x2192;'}</mo>${wrap(n.down)}${wrap(n.up)}</munderover>`;
+    case 'matrix': return `<mrow><mo>${esc({p:'(',b:'[',B:'{',v:'|',cases:'{',none:''}[n.kind]||'(')}</mo><mtable>`
+      + n.rows.map(r=>'<mtr>'+r.map(c=>`<mtd>${rw(c)}</mtd>`).join('')+'</mtr>').join('')
+      + `</mtable><mo>${esc({p:')',b:']',B:'}',v:'|',cases:'',none:''}[n.kind]||')')}</mo></mrow>`;
+  }
+  return '';
+}
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+// UnicodeMath（Word 线性格式，UTN #28）—— 与 Office OMML 互通的入口
+function toUni(n){
+  const rw = r => r.k.map(c => toUni(c)).join('');
+  const g  = r => { const s = rw(r); return s.length <= 1 ? s : '('+s+')'; };
+  switch(n.t){
+    case 'row'   : return rw(n);
+    case 'sym'   : return n.c;
+    case 'fn'    : return n.name+' ';
+    case 'txt'   : return '"'+n.s+'"';
+    case 'frac'  : return g(n.n)+'/'+g(n.d);
+    case 'sqrt'  : return n.idx ? '√('+rw(n.idx)+'&'+rw(n.b)+')' : '√'+g(n.b);
+    case 'script': return g(n.base) + (n.sub?'_'+g(n.sub):'') + (n.sup?'^'+g(n.sup):'');
+    case 'delim' : return n.l+rw(n.b)+n.r;
+    case 'acc'   : return g(n.b) + {vec:'⃗',bar:'̄',hat:'̂',dot:'̇',tilde:'̃'}[n.kind];
+    case 'choose': return n.kind+'_'+g(n.n)+'^'+g(n.m);
+    case 'bigop' : return n.op+'_'+g(n.from)+(n.to?'^'+g(n.to):'')+' ';
+    case 'lim'   : return 'lim_'+g(n.to)+' ';
+    case 'arrow' : return (n.kind==='<=>'?'⇌':'→')+'_'+g(n.down)+'^'+g(n.up)+' ';
+    case 'matrix': return '('+n.rows.map(r=>r.map(c=>rw(c)).join('&')).join('@')+')';
+  }
+  return '';
+}
+
+// 语义树（存库用的形态，去掉 DOM/父指针）
+function toPlain(n){
+  const rw = r => ({ row: r.k.map(toPlain) });
+  const o = { type: n.t };
+  switch(n.t){
+    case 'row'   : return n.k.map(toPlain);
+    case 'sym'   : return { sym: n.c, kind: n.v };
+    case 'fn'    : return { fn: n.name };
+    case 'txt'   : return { text: n.s };
+    case 'frac'  : return { frac:{ num: toPlain(n.n), den: toPlain(n.d) } };
+    case 'sqrt'  : return n.idx ? { root:{ idx: toPlain(n.idx), body: toPlain(n.b) } } : { sqrt: toPlain(n.b) };
+    case 'script': return { script:{ base: toPlain(n.base), sup: n.sup?toPlain(n.sup):null, sub: n.sub?toPlain(n.sub):null } };
+    case 'delim' : return { delim:[n.l, n.r], body: toPlain(n.b) };
+    case 'acc'   : return { accent: n.kind, body: toPlain(n.b) };
+    case 'choose': return { combinatorial:{ op: n.kind==='C'?'combination':'permutation', n: toPlain(n.n), k: toPlain(n.m) } };
+    case 'bigop' : return { bigop:{ op:n.op, from: toPlain(n.from), to: n.to?toPlain(n.to):null } };
+    case 'lim'   : return { limit: toPlain(n.to) };
+    case 'arrow' : return { reaction:{ kind:n.kind, above: toPlain(n.up), below: toPlain(n.down) } };
+    case 'matrix': return { matrix:{ kind:n.kind, rows: n.rows.map(r=>r.map(toPlain)) } };
+  }
+  return o;
+}
+
+// 读屏朗读：由语义推导，不是字符串猜测
+const SPEAK_SYM = {
+  'zh-CN':{'+':'加','-':'减','×':'乘','÷':'除以','=':'等于','⩾':'大于或等于','⩽':'小于或等于','≠':'不等于',
+    '∽':'相似于','≌':'全等于','∠':'角','△':'三角形','⊙':'圆','∥':'平行于','⊥':'垂直于','±':'正负','π':'派',
+    '∵':'因为','∴':'所以','↑':'气体','↓':'沉淀','⇌':'可逆生成','→':'生成'},
+  'zh-HK':{'+':'加','-':'減','×':'乘','÷':'除以','=':'等於','⩾':'大於或等於','⩽':'小於或等於','≠':'不等於',
+    '∽':'相似於','≌':'全等於','∠':'角','△':'三角形','⊙':'圓','∥':'平行於','⊥':'垂直於','±':'正負','π':'pi',
+    '∵':'因為','∴':'所以','↑':'氣體','↓':'沉澱','⇌':'可逆生成','→':'生成'},
+  'en':{'+':' plus ','-':' minus ','×':' times ','÷':' divided by ','=':' equals ','⩾':' is greater than or equal to ',
+    '⩽':' is less than or equal to ','≠':' is not equal to ','∽':' is similar to ','≌':' is congruent to ',
+    '∠':'angle ','△':'triangle ','⊙':'circle ','∥':' is parallel to ','⊥':' is perpendicular to ',
+    '±':' plus or minus ','π':'pi','∵':'since ','∴':'therefore ','↑':' gas','↓':' precipitate',
+    '⇌':' in equilibrium with ','→':' yields '},
+};
+function speak(n){
+  const rw = r => r.k.map(speak).join('');
+  const NAME = SPEAK_SYM[LANG] || SPEAK_SYM['zh-CN'];
+  const EN = LANG === 'en';
+  switch(n.t){
+    case 'row'   : return rw(n);
+    case 'sym'   : return NAME[n.c] || n.c;
+    case 'fn'    : return n.name;
+    case 'txt'   : return n.s;
+    case 'frac'  : return EN ? `${rw(n.n)} over ${rw(n.d)}, ` : `${rw(n.d)}${t('s.over')}${rw(n.n)}，`;
+    case 'sqrt'  : return n.idx ? (EN ? `${rw(n.idx)}th root of ${rw(n.b)}, ` : `${rw(n.idx)}${t('s.nroot')}${rw(n.b)}，`)
+                                : (EN ? `square root of ${rw(n.b)}, ` : `${t('s.sqrt')}${rw(n.b)}，`);
+    case 'script': return rw(n.base)
+                   + (n.sub ? (EN ? ` sub ${rw(n.sub)}` : `${t('s.sub')}${rw(n.sub)}`) : '')
+                   + (n.sup ? (rw(n.sup) === '2' ? t('s.sq')
+                        : EN ? ` to the power ${rw(n.sup)}` : `的${rw(n.sup)}次方`) : '');
+    case 'delim' : return EN ? `open paren ${rw(n.b)} close paren, ` : `括号${rw(n.b)}括号完，`;
+    case 'acc'   : return n.kind==='vec' ? `${t('s.vec')}${rw(n.b)}` : rw(n.b);
+    case 'choose': return EN ? `${rw(n.n)} choose ${rw(n.m)}`
+                   : `${rw(n.n)}${t('s.choose')}${rw(n.m)}${n.kind==='C'?t('s.comb'):t('s.perm')}`;
+    case 'bigop' : return EN ? `${n.op==='∑'?'sum':'integral'} from ${rw(n.from)} to ${n.to?rw(n.to):''}, `
+                   : `从${rw(n.from)}到${n.to?rw(n.to):''}${n.op==='∑'?'求和':'积分'}，`;
+    case 'lim'   : return EN ? `limit as ${rw(n.to)}, ` : `当${rw(n.to)}时的极限，`;
+    case 'arrow' : return EN ? `${rw(n.up)?'under '+rw(n.up)+', ':''}${n.kind==='<=>'?'in equilibrium with':'yields'} `
+                   : `${rw(n.up)?rw(n.up)+'条件下':''}${n.kind==='<=>'?'可逆生成':'生成'}`;
+    case 'matrix': return EN ? `${n.rows.length} by ${n.rows[0].length} matrix, ` : `${n.rows.length}行${n.rows[0].length}列矩阵，`;
+  }
+  return '';
+}
+
+/* ---------- 4b. LaTeX 解析：字符串 → 语义树 ----------
+   嵌进已有产品时这一半比导出更要紧：题库里存量的公式都是 LaTeX，
+   读不进来，编辑器就只能用于新建，等于没法接入。
+   只解析本编辑器会产出的子集，遇到不认识的命令原样降级成符号，不抛错。 */
+const TEX_SYM_REV = Object.fromEntries(
+  Object.entries(TEX_SYM).map(([ch, tex]) => [tex.trim().replace(/^\\/,''), ch]));
+const FN_NAMES = ['sin','cos','tan','cot','sec','csc','arcsin','arccos','arctan','log','ln','lg','exp','max','min'];
+const ACC_REV  = { overrightarrow:'vec', vec:'vec', overline:'bar', bar:'bar', hat:'hat', dot:'dot', tilde:'tilde' };
+const MAT_REV  = { pmatrix:'p', bmatrix:'b', Bmatrix:'B', vmatrix:'v', cases:'cases', matrix:'none' };
+
+function lexTex(s){
+  const out = []; let i = 0;
+  while (i < s.length){
+    const c = s[i];
+    if (c === '\\'){
+      const m = /^\\([a-zA-Z]+|\\|[{}|,;!])/.exec(s.slice(i));
+      if (m){ out.push({ k:'cmd', v:m[1] }); i += m[0].length; }
+      else { i++; }
+    }
+    else if ('{}^_[]&'.includes(c)){ out.push({ k:c }); i++; }
+    else if (/\s/.test(c)){ i++; }
+    else { out.push({ k:'ch', v:c }); i++; }
+  }
+  return out;
+}
+
+function fromTex(src){
+  const T = lexTex(String(src || ''));
+  let p = 0;
+  const at   = () => T[p];
+  const isCmd = (name) => at() && at().k === 'cmd' && at().v === name;
+
+  function group(){                                   // { ... } 或单个记号
+    if (at() && at().k === '{'){ p++; const r = rowUntil('}'); if (at() && at().k === '}') p++; return r; }
+    const u = unit(); return u ? R(u) : R();
+  }
+  function optGroup(){                                // [ ... ]，\sqrt 的次数与 \xrightarrow 的下方条件
+    if (at() && at().k === '['){ p++; const r = rowUntil(']'); if (at() && at().k === ']') p++; return r; }
+    return null;
+  }
+  function rowUntil(stop){
+    const k = [];
+    while (at() && at().k !== stop && !isCmd('end')){
+      const u = unit(); if (!u) break;
+      Array.isArray(u) ? k.push(...u) : k.push(u);
+    }
+    return R(...k);
+  }
+
+  function base(){
+    const t = at();
+    if (!t) return null;
+    if (t.k === 'ch'){
+      p++;
+      const c = t.v;
+      let v = 'var';
+      if (/[0-9.]/.test(c)) v = 'num';
+      else if ('+-*/×÷±'.includes(c)) v = 'op';
+      else if ('=<>'.includes(c)) v = 'rel';
+      else if (',;:'.includes(c)) v = 'punc';
+      return SY(c, v);
+    }
+    if (t.k === '{'){ return { t:'__grp', r: group() }; }
+    if (t.k !== 'cmd') { p++; return null; }
+
+    const name = t.v; p++;
+    if (name === 'frac')  return N.frac(group(), group());
+    if (name === 'binom'){ const a = group(), b = group(); return N.choose('C', a, b); }
+    // 短别名：\mathrm{C} 要花括号，命令输入打不出来，而这是高频输入
+    if (name === 'comb' || name === 'nCr') return N.choose('C');
+    if (name === 'perm' || name === 'nPr') return N.choose('A');
+    if (name === 'sqrt'){ const idx = optGroup(); const b = group(); return N.sqrt(b, idx); }
+    if (name === 'text'){ const r = group(); return r.k.map(x => N.txt(x.t === 'sym' ? x.c : (x.s || ''))); }
+    if (ACC_REV[name])   return N.acc(ACC_REV[name], group());
+    if (FN_NAMES.includes(name)) return N.fn(name);
+    if (name === 'mathrm'){
+      const r = group();
+      const ch = r.k.length === 1 && r.k[0].t === 'sym' ? r.k[0].c : null;
+      // P 是香港 DSE 的排列记号，对应大陆的 A —— 语义同一个，落到同一个节点
+      if (ch === 'C' || ch === 'A' || ch === 'P')
+        return { t:'__mathrm', kind: ch === 'P' ? 'A' : ch };
+      return { t:'__grp', r };
+    }
+    if (name === 'left' || name === 'right'){
+      const d = at(); let ch = '';
+      if (d){ ch = d.k === 'ch' ? d.v : (d.k === 'cmd' ? ({ lbrace:'{', rbrace:'}', vert:'|', lvert:'|', rvert:'|' }[d.v] || '') : ''); p++; }
+      if (name === 'right') return { t:'__right', ch };
+      const body = [];
+      while (at() && !(at().k === 'cmd' && at().v === 'right')){
+        const u = unit(); if (!u) break; Array.isArray(u) ? body.push(...u) : body.push(u);
+      }
+      let close = '';
+      if (isCmd('right')){ const r2 = base(); if (r2 && r2.t === '__right') close = r2.ch; }
+      return N.delim(ch === '.' ? '' : ch, close === '.' ? '' : close, R(...body));
+    }
+    if (name === 'sum' || name === 'prod' || name === 'int'){
+      const op = name === 'sum' ? '∑' : name === 'prod' ? '∏' : '∫';
+      let from = R(), to = null;
+      for (let g = 0; g < 2 && at(); g++){
+        if (at().k === '_'){ p++; from = group(); }
+        else if (at().k === '^'){ p++; to = group(); }
+        else break;
+      }
+      return N.bigop(op, from, to);
+    }
+    if (name === 'lim'){ let to = R(); if (at() && at().k === '_'){ p++; to = group(); } return N.lim(to); }
+    if (name === 'xrightarrow' || name === 'xrightleftharpoons' || name === 'xRightarrow'){
+      const kind = name === 'xrightleftharpoons' ? '<=>' : name === 'xRightarrow' ? '=>' : '->';
+      const down = optGroup() || R(); const up = group();
+      return N.arrow(kind, up, down);
+    }
+    if (name === 'begin'){
+      const env = group().k.map(x => x.c || '').join('');
+      const rows = [[R()]];
+      let cur = rows[0];
+      for(;;){
+        if (!at()) break;
+        if (isCmd('end')){ p++; group(); break; }
+        if (at().k === '&'){ p++; cur.push(R()); continue; }
+        if (at().k === 'cmd' && at().v === '\\'){ p++; cur = [R()]; rows.push(cur); continue; }
+        const u = unit(); if (!u) break;
+        const tgt = cur[cur.length-1];
+        Array.isArray(u) ? tgt.k.push(...u) : tgt.k.push(u);
+      }
+      const width = Math.max(...rows.map(r => r.length));
+      rows.forEach(r => { while (r.length < width) r.push(R()); });
+      return N.matrix(MAT_REV[env] || 'p', rows);
+    }
+    if (TEX_SYM_REV[name]){
+      const ch = TEX_SYM_REV[name];
+      return SY(ch, '+-×÷±·'.includes(ch) ? 'op' : '=<>≠≈≤≥⩽⩾∈∉⊂⊆∥⊥∽≌'.includes(ch) ? 'rel' : 'var');
+    }
+    // 不认识的命令：原样拼回去让人看见，绝不返回空节点。
+    // 静默吞掉输入比报错更糟——老师会以为自己没打上，然后重打一遍。
+    if (name.length === 1) return SY(name, 'var');
+    return [SY('\\','cmd'), ...[...name].map(c => SY(c, 'cmd'))];
+  }
+
+  function unit(){
+    let b = base();
+    if (b === null) return null;
+    if (Array.isArray(b)) return b;                      // \text{} 展开成多个字符节点
+    // 收上下标
+    let sup = null, sub = null;
+    while (at() && (at().k === '^' || at().k === '_')){
+      const isSup = at().k === '^'; p++;
+      const g = group();
+      if (isSup) sup = g; else sub = g;
+    }
+    if (b.t === '__mathrm'){
+      if (sub || sup) return N.choose(b.kind, sub || R(), sup || R());
+      return SY(b.kind, 'up');
+    }
+    // 香港 DSE 的前置下标形 {}_{n}\mathrm{C}_{r}：空组 + 下标 + 紧跟的 \mathrm{C/P}
+    if (b.t === '__grp' && b.r.k.length === 0 && sub && !sup && isCmd('mathrm')){
+      const save = p;
+      const m2 = base();                       // 吃掉 \mathrm{...}
+      if (m2 && m2.t === '__mathrm'){
+        let post = R();
+        if (at() && at().k === '_'){ p++; post = group(); }
+        return N.choose(m2.kind, sub, post);
+      }
+      p = save;                                // 不是这个形状就退回去，别吞掉记号
+    }
+    const baseRow = b.t === '__grp' ? b.r : R(b);
+    if (sup || sub) return N.script(baseRow, sup, sub);
+    if (b.t === '__grp')
+      return b.r.k.length === 1 ? b.r.k[0] : b.r.k;   // 摊平，别包成不可见的 \left.\right.
+    return b;
+  }
+
+  const doc = rowUntil(null);
+  relink(doc);
+  return doc;
+}
+
+/* ---------- 5. 判分引擎（确定层） ---------- */
+// 有理数：让 1/2 与 0.5 精确同一，且能判「最简分数」
+const gcd = (a,b) => b ? gcd(b, a % b) : Math.abs(a);
+function Fr(n, d=1){ if (d < 0){ n = -n; d = -d; } const g = gcd(n,d) || 1; return { n: n/g, d: d/g }; }
+const frAdd = (a,b)=>Fr(a.n*b.d + b.n*a.d, a.d*b.d), frMul=(a,b)=>Fr(a.n*b.n, a.d*b.d);
+const frDiv = (a,b)=>Fr(a.n*b.d, a.d*b.n), frSub=(a,b)=>Fr(a.n*b.d - b.n*a.d, a.d*b.d);
+
+// AST → 表达式树（判分用的中间形态）
+function toExpr(node){
+  if (node.t === 'row') return parseSeq(node.k.slice());
+  return parseSeq([node]);
+}
+function parseSeq(k){
+  // 极小的中缀解析：加减 → 乘除 → 幂 → 原子（隐式乘法按并列处理）
+  let pos = 0;
+  const peek = () => k[pos];
+  const isOp = (c) => c && c.t === 'sym' && '+-×÷*·/'.includes(c.c);
+  function atom(){
+    const c = k[pos];
+    if (!c) return null;
+    if (c.t === 'sym' && /[0-9.]/.test(c.c)){
+      let s = '';
+      while (k[pos] && k[pos].t === 'sym' && /[0-9.]/.test(k[pos].c)) s += k[pos++].c;
+      return { k:'num', v: parseFloat(s) };
+    }
+    if (c.t === 'sym' && /[a-zA-Zα-ωπ]/.test(c.c)){ pos++; return c.c==='π' ? {k:'num',v:Math.PI} : { k:'var', v: c.c }; }
+    if (c.t === 'frac'){ pos++; return { k:'div', a: toExpr(c.n), b: toExpr(c.d) }; }
+    if (c.t === 'sqrt'){ pos++; return { k:'root', a: toExpr(c.b), n: c.idx ? toExpr(c.idx) : {k:'num',v:2} }; }
+    if (c.t === 'delim'){ pos++; return toExpr(c.b); }
+    if (c.t === 'script'){
+      pos++;
+      const base = toExpr(c.base);
+      if (c.sup) return { k:'pow', a: base, b: toExpr(c.sup) };
+      return base;
+    }
+    if (c.t === 'choose'){ pos++; return { k: c.kind==='C'?'comb':'perm', a: toExpr(c.n), b: toExpr(c.m) }; }
+    if (c.t === 'fn'){
+      pos++;
+      const arg = atom();
+      return { k:'call', f: c.name, a: arg };
+    }
+    pos++; return null;                       // 无法参与计算的记号（关系符等）跳过
+  }
+  function unary(){
+    if (peek() && peek().t==='sym' && peek().c === '-'){ pos++; return { k:'neg', a: unary() }; }
+    return atom();
+  }
+  function term(){
+    let a = unary();
+    for(;;){
+      const c = peek();
+      if (c && c.t==='sym' && '×÷*·/'.includes(c.c)){ pos++; const b = unary(); a = { k: '×*·'.includes(c.c)?'mul':'div', a, b }; }
+      else if (c && (c.t!=='sym' || /[a-zA-Z0-9.α-ωπ]/.test(c.c)) && a){ const b = unary(); if(!b) break; a = { k:'mul', a, b }; } // 隐式乘法
+      else break;
+    }
+    return a;
+  }
+  function expr(){
+    let a = term();
+    for(;;){
+      const c = peek();
+      if (c && c.t==='sym' && (c.c==='+'||c.c==='-')){ pos++; const b = term(); a = { k: c.c==='+'?'add':'sub', a, b }; }
+      else break;
+    }
+    return a;
+  }
+  const r = expr();
+  return r || { k:'num', v: NaN };
+}
+
+const FACT = n => { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; };
+function ev(e, env, rules={}){
+  if (!e) return NaN;
+  const E = x => ev(x, env, rules);
+  switch(e.k){
+    case 'num' : return e.v;
+    case 'var' : return env[e.v] !== undefined ? env[e.v] : NaN;
+    case 'neg' : return -E(e.a);
+    case 'add' : return rules.fracAdd ? rules.fracAdd(e,env,rules) : E(e.a) + E(e.b);
+    case 'sub' : return E(e.a) - E(e.b);
+    case 'mul' : return E(e.a) * E(e.b);
+    case 'div' : return E(e.a) / E(e.b);
+    case 'pow' : return rules.powDist ? rules.powDist(e,env,rules) : Math.pow(E(e.a), E(e.b));
+    case 'root': return rules.rootDist ? rules.rootDist(e,env,rules) : Math.pow(E(e.a), 1/E(e.n));
+    case 'comb': { const n = E(e.a), m = E(e.b); return FACT(n)/(FACT(m)*FACT(n-m)); }
+    case 'perm': { const n = E(e.a), m = E(e.b); return FACT(n)/FACT(n-m); }
+    case 'call': { const f = { sin:Math.sin, cos:Math.cos, tan:Math.tan, ln:Math.log, log:Math.log10, exp:Math.exp }[e.f]; return f ? f(E(e.a)) : NaN; }
+  }
+  return NaN;
+}
+function freeVars(e, out = new Set()){
+  if (!e) return out;
+  if (e.k === 'var') out.add(e.v);
+  ['a','b','n'].forEach(kk => e[kk] && typeof e[kk] === 'object' && freeVars(e[kk], out));
+  return out;
+}
+// 数值抽样等价：工业界通用做法，避开奇点，要求足够多个有效样本一致
+function equivalent(eA, eB){
+  const vars = [...new Set([...freeVars(eA), ...freeVars(eB)])];
+  let ok = 0, tried = 0;
+  const SEED = [0.37,1.21,2.53,3.11,0.79,1.87,2.09,4.33,0.53,3.67,1.41,2.71];
+  for (let t = 0; t < 40 && ok < 12; t++){
+    const env = {}; vars.forEach((v,i) => env[v] = SEED[(t*3+i) % SEED.length] + t*0.13);
+    const a = ev(eA, env), b = ev(eB, env);
+    if (!isFinite(a) || !isFinite(b)) continue;
+    tried++;
+    const scale = Math.max(1, Math.abs(a), Math.abs(b));
+    if (Math.abs(a-b) / scale > 1e-9) return { eq:false, samples: tried };
+    ok++;
+  }
+  return { eq: ok >= (vars.length ? 6 : 1), samples: ok };
+}
+
+// 形式检查：结构层面的要求，不是数值层面
+function checkForm(doc, req){
+  if (req === 'simplest'){
+    // 先判「算完了没有」。数值等价拦不住把题目抄一遍——1/2+1/3 与 5/6 数值相同，
+    // 但学生一步没算。要求最简分数，答案就必须是一个分数，不能是还带运算符的式子。
+    const unresolved = doc.k.some(n => n.t === 'sym' && n.v === 'op' && '+-×÷'.includes(n.c));
+    if (unresolved) return { pass:false, msg: t('f.simplestBad') };
+    const f = findNode(doc, n => n.t === 'frac');
+    if (!f) return { pass:true, msg: t('f.notfrac') };
+    const nu = numOf(f.n), de = numOf(f.d);
+    if (nu === null || de === null) return { pass:true, msg: t('f.hasvar') };
+    const g = gcd(nu, de);
+    return g === 1 ? { pass:true, msg:`${t('f.coprime')}（gcd=${g}）` }
+                   : { pass:false, msg:`${t('f.reducible')} ${g}，${t('f.shouldbe')} ${nu/g}/${de/g}` };
+  }
+  if (req === 'rational'){
+    const f = findNode(doc, n => n.t === 'frac');
+    if (!f) return { pass:true, msg: t('f.notfrac') };
+    const bad = findNode(f.d, n => n.t === 'sqrt');
+    return bad ? { pass:false, msg: t('f.denomroot') } : { pass:true, msg: t('f.denomok') };
+  }
+  return { pass:true, msg: t('f.none') };
+}
+function findNode(n, pred){
+  if (pred(n)) return n;
+  const kids = n.t === 'row' ? n.k : slots(n);
+  for (const c of kids){ const r = findNode(c, pred); if (r) return r; }
+  return null;
+}
+function numOf(row){
+  let s = '';
+  for (const c of row.k){ if (c.t === 'sym' && /[0-9]/.test(c.c)) s += c.c; else return null; }
+  return s ? parseInt(s,10) : null;
+}
+
+/* ---------- 6. 误因探针：由同一台引擎按错误规则跑出来 ---------- */
+/* 这不是让模型编几个"看着像"的错答案，而是把具体的错误推理实现成规则，
+   喂给同一台引擎跑一遍——它吐出来的就是犯那个错的学生会得到的数。
+   好处：干扰值与误解是同一件事的两面，可复现、可审计、换题自动跟着变。      */
+const MISCONCEPTIONS = [
+  { id:'frac-add-across', nameKey:'m.fracadd', hintKey:'m.fracaddH',
+    rules:{ fracAdd:(e,env,rules)=>{
+      if (e.a.k==='div' && e.b.k==='div'){
+        const n = ev(e.a.a,env,rules) + ev(e.b.a,env,rules);
+        const d = ev(e.a.b,env,rules) + ev(e.b.b,env,rules);
+        return n/d;
+      }
+      return ev(e.a,env,rules) + ev(e.b,env,rules);
+    }}},
+  { id:'pow-dist', nameKey:'m.powdist', hintKey:'m.powdistH',
+    rules:{ powDist:(e,env,rules)=>{
+      const p = ev(e.b,env,rules);
+      if (e.a.k==='add') return Math.pow(ev(e.a.a,env,rules),p) + Math.pow(ev(e.a.b,env,rules),p);
+      if (e.a.k==='sub') return Math.pow(ev(e.a.a,env,rules),p) - Math.pow(ev(e.a.b,env,rules),p);
+      return Math.pow(ev(e.a,env,rules), p);
+    }}},
+  { id:'root-dist', nameKey:'m.rootdist', hintKey:'m.rootdistH',
+    rules:{ rootDist:(e,env,rules)=>{
+      const nn = ev(e.n,env,rules);
+      if (e.a.k==='add') return Math.pow(ev(e.a.a,env,rules),1/nn) + Math.pow(ev(e.a.b,env,rules),1/nn);
+      return Math.pow(ev(e.a,env,rules), 1/nn);
+    }}},
+];
+
+function probeMisconceptions(srcExpr, stuExpr){
+  const vars = [...new Set([...freeVars(srcExpr), ...freeVars(stuExpr)])];
+  const near = (a,b) => Math.abs(a-b) / Math.max(1, Math.abs(a), Math.abs(b)) < 1e-9;
+  const out = [];
+  for (const m of MISCONCEPTIONS){
+    let hits = 0, valid = 0, applicable = 0, sample = null;
+    for (let t = 0; t < 14; t++){
+      const env = {}; vars.forEach((v,i) => env[v] = 0.41 + t*0.37 + i*1.19);
+      const wrong   = ev(srcExpr, env, m.rules);     // ← 引擎按错误规则跑一遍
+      const correct = ev(srcExpr, env);              // ← 同一台引擎按正确规则再跑一遍
+      const stuVal  = ev(stuExpr, env);
+      if (![wrong, correct, stuVal].every(isFinite)) continue;
+      valid++;
+      // 该误解对本题必须真的产生偏差，否则「规则不适用」会让正确作答命中每一条规则
+      if (near(wrong, correct)) continue;
+      applicable++;
+      if (sample === null) sample = { wrong, correct, stu: stuVal };
+      if (near(wrong, stuVal)) hits++;
+    }
+    out.push({ ...m, hit: applicable >= 3 && hits === applicable, valid, applicable, sample });
+  }
+  return out;
+}
+
+/* ==========================================================================
+   界面接线
+   ========================================================================== */
+/* ==========================================================================
+   三语
+   繁體不是简繁转换：撤销/復原、示例/範例、语义/語意、判分/評分、读屏/螢幕閱讀器
+   都是真实的用语差异，直接照抄简体会让港台老师一眼看出是「大陆软件翻的」。
+   ========================================================================== */
+const I18N = {
+'zh-CN': {
+  'ui.theme':'切换深浅色', 'ui.copy':'复制', 'ui.copied':'已复制', 'ui.copyfail':'手动选中复制', 'ui.empty':'（空）',
+  'hero.title':'CocoMath · K12 理科公式编辑器',
+  'hero.sub':'所见即所得的公式输入，底层是语义树，不是 LaTeX 字符串。同一棵树能按大陆教材、香港 DSE 或国际记号渲染，能导出四种格式，也能直接喂给确定性引擎判分。页面可以直接操作。',
+  'tag.ast':'语义 AST 内核','tag.cn':'三套教材记号','tag.chem':'化学反应式','tag.grade':'确定性判分','tag.embed':'可嵌入','tag.nodep':'零外部依赖',
+  'gaps.label':'这一版还没做到的：','gaps.hw':'手写与拍照识别','gaps.vert':'小学竖式与脱式','gaps.org':'有机结构式','gaps.tex':'专业级 TeX 断行与字体度量','gaps.collab':'协同编辑',
+  'c1.h':'公式输入',
+  'c1.hint':'点进去直接打字。<span class="kbd">/</span> 分数 · <span class="kbd">^</span> 上标 · <span class="kbd">_</span> 下标 · <span class="kbd">Tab</span> 跳下一格 · <span class="kbd">Ctrl/⌘ Z</span> 撤销 · <span class="kbd">←→</span> 在树里走 · <span class="kbd">↑↓</span> 换层 · <span class="kbd">Backspace</span> 语义删除（删分数线会把分子留下）<br>会 LaTeX 的话直接打命令：<span class="kbd">\\sqrt</span> <span class="kbd">\\frac</span> <span class="kbd">\\comb</span> <span class="kbd">\\pi</span> <span class="kbd">\\geqslant</span>，空格提交。',
+  'c1.note':'切换制式，第 2 屏的 LaTeX 会跟着变。组合数在大陆教材写作 <i>C</i><sub>n</sub><sup>m</sup>，香港 DSE 写作 <i><sub>n</sub>C<sub>r</sub></i>，国际写作 <code>\\binom{n}{m}</code>。三种写法是同一个语义节点的三种渲染。存进库的是「组合数」这个语义，导出时才决定写成哪种记号。【待补：台湾教材的上下标顺序未核实，暂未单列】',
+  'nota.label':'记号制式','nota.cn':'大陆教材','nota.hk':'香港 DSE','nota.intl':'国际通用',
+  'btn.undo':'撤销','btn.clear':'清空','btn.demo':'载入示例',
+  'c2.h':'同一棵树，四种输出',
+  'c2.hint':'LaTeX 给排版和试卷，MathML 给读屏和无障碍，UnicodeMath 给 Word/OMML 互通，语义树给判分和数据分析。字符串在这里都是导出物，存储格式是语义树。',
+  'why.tex':'排版 / 试卷 / 题库','why.mml':'读屏 / 无障碍','why.uni':'Word 线性输入','why.ast':'判分 / 学情分析','out.ast':'语义树',
+  'c2.speech':'读屏朗读（由 MathML 语义推导，非字符串猜测）：',
+  'c3.h':'确定性判分',
+  'c3.hint':'等价判定走引擎，不走模型。数值抽样加有理数精确比较判「对不对」，结构检查判「形式合不合要求」。误因由同一台引擎按错误规则跑一遍导出，不交给模型编。',
+  'lbl.std':'标准答案（教师端）','lbl.stu':'学生作答（可直接改，实时判）',
+  'form.label':'形式要求','form.none':'不限','form.simplest':'最简分数','form.rational':'分母有理化',
+  'c3.note':'编辑器在这条链路上只负责把语义收干净。拿不到语义就判不了分，只能拿字符串比对，那等于没判。',
+  'c4.h':'嵌进你自己的系统',
+  'c4.hint':'两种接法。同页嵌入拿到实例直接调方法；跨源或需要沙箱时用 iframe 加 postMessage。右边那个编辑器就是用左边的代码挂上去的，改一下公式，宿主收到的回调会实时打出来。',
+  'c4.host':'宿主页面',
+  'c4.note':'不挂界面也能用，宿主批量迁移题库时直接调：<code>CocoMath.parseLaTeX(s)</code> 取语义树、<code>CocoMath.latexToMathML(s)</code> 出无障碍标记、<code>CocoMath.areEquivalent(a, b)</code> 判两个式子等不等价。iframe 接法把本页用 <code>?embed=1</code> 打开，宿主发 <code>{type:\'cocomath:set\', latex}</code>，收 <code>{type:\'cocomath:change\', …}</code>。',
+    'r0.a':'WYSIWYG 输入 · 光标在语义树里走', 'r0.c':'分数 / 根号 / 上下标 / 矩阵 / 括号自动缩放',
+  'r1.a':'三套记号（大陆 <i>C</i><sub>n</sub><sup>m</sup>、香港 <i><sub>n</sub>C<sub>r</sub></i>、国际 binom）', 'r1.c':'一键切换，底层语义不变',
+  'r2.a':'化学反应式（条件写在箭头上下、⇌、↑↓）', 'r2.c':'初中化学最高频的输入',
+  'r3.a':'四格导出 + 读屏朗读', 'r3.c':'MathML 由语义生成，不是正则改写 LaTeX',
+  'r4.a':'确定性判分 + 误因引擎导出', 'r4.c':'数值抽样 + 有理数精确 + 形式检查',
+  'r5.a':'编辑手感：撤销重做 · <code>\\命令</code>输入 · 粘贴 LaTeX', 'r5.c':'实测常用公式 8–33 键，全部键盘可达',
+  'r6.a':'选区：拖选、Shift+方向键选一段', 'r6.c':'剩余最大缺口。改长公式只能逐字退格',
+  'r7.a':'手写与拍照识别', 'r7.c':'iPad 上老师和学生都不用键盘',
+  'r8.a':'小学竖式、脱式、递等式', 'r8.c':'国际库全部没有，需自建节点',
+  'r9.a':'专业级 TeX 断行与字体度量', 'r9.c':'生产版改用 MathLive（MIT）承担排版层，内核保留',
+  'c5.h':'这一版有什么、缺什么','c5.cap':'能力','c5.this':'本原型','c5.note':'说明',
+  'v.pass':'判定通过','v.fail':'未通过','v.eq':'数值等价','v.eqYes':'等价','v.eqNo':'不等价',
+  'v.samples':'组抽样全部一致','v.diverge':'抽样即出现分歧','v.form':'形式要求','v.notmet':'不满足',
+  'v.std':'标准答案','v.stu':'学生作答','v.hit':'命中已知误解','v.nohit':'答案不等价，但<b>未命中</b>已登记的误解。',
+  'v.nohit2':'这种情况不交给模型猜，走人工归因，确认后新增一条规则。',
+  'v.derived':'这个错值由引擎导出：把该误解实现成一条规则，喂给同一台引擎跑一遍。所以能对学生指名道姓地说他哪一步错了。',
+  'v.probes':'误因探针（引擎按各条错误规则各跑一遍，与正确值有偏差才算「适用于本题」）',
+  'v.pmis':'误解','v.pval':'引擎导出的错值','v.pstu':'与学生作答','v.na':'本题不适用','v.miss':'不符','v.gothit':'✓ 命中',
+  'f.simplestBad':'还没算完：要求最简分数时，答案应当是一个分数，不能留着运算符',
+  'f.coprime':'分子分母互质','f.reducible':'还能约分：分子分母有公因数','f.shouldbe':'应写成',
+  'f.notfrac':'不是分数形式，形式要求不适用','f.hasvar':'含变量，跳过最简判定',
+  'f.denomroot':'分母仍含根号，未有理化','f.denomok':'分母不含根号','f.none':'未设形式要求',
+  'm.fracadd':'分数加法：分子分母分别相加','m.fracaddH':'把 a/b + c/d 算成 (a+c)/(b+d)，没通分。',
+  'm.powdist':'和的乘方 = 乘方的和','m.powdistH':'把 (a+b)ⁿ 算成 aⁿ+bⁿ，漏掉交叉项。',
+  'm.rootdist':'根号可分配','m.rootdistH':'把 √(a+b) 算成 √a+√b。',
+  'p.common':'常用','p.cn':'教材记号','p.chem':'化学','p.big':'大算符 · 矩阵',
+  'p.frac':'分数','p.sup':'上标','p.sub':'下标','p.sqrt':'根号','p.root':'n 次根',
+  'p.paren':'括号','p.brack':'方括号','p.abs':'绝对值','p.comb':'组合数','p.perm':'排列数',
+  'p.ge':'大于等于','p.le':'小于等于','p.sim':'相似','p.cong':'全等','p.vec':'向量','p.mean':'平均数',
+  'p.cond':'反应条件','p.rev':'可逆','p.gas':'气体','p.pcp':'沉淀','p.heat':'加热','p.sub2':'下标','p.ion':'离子','p.cat':'催化剂',
+  'p.sum':'求和','p.int':'积分','p.lim':'极限','p.mat':'2×2 矩阵','p.cases':'方程组','p.piece':'分段函数',
+  's.over':'分之','s.plus':'加','s.minus':'减','s.times':'乘','s.div':'除以','s.eq':'等于',
+  's.sqrt':'根号下','s.nroot':'次根号下','s.sq':'的平方','s.pow':'次方','s.of':'的','s.sub':'下标',
+  's.paren1':'括号','s.paren2':'括号完','s.vec':'向量','s.comb':'的组合数','s.perm':'的排列数','s.choose':'选',
+},
+'zh-HK': {
+  'ui.theme':'切換深淺色', 'ui.copy':'複製', 'ui.copied':'已複製', 'ui.copyfail':'請手動選取複製', 'ui.empty':'（空）',
+  'hero.title':'CocoMath · K12 理科公式編輯器',
+  'hero.sub':'所見即所得的公式輸入，底層是語義樹，不是 LaTeX 字串。同一棵樹能依大陸教材、香港 DSE 或國際記號呈現，能匯出四種格式，也能直接交給確定性引擎評分。頁面可以直接操作。',
+  'tag.ast':'語義 AST 核心','tag.cn':'三套教材記號','tag.chem':'化學反應式','tag.grade':'確定性評分','tag.embed':'可嵌入','tag.nodep':'零外部依賴',
+  'gaps.label':'這一版尚未做到的：','gaps.hw':'手寫與拍照識別','gaps.vert':'小學直式計算','gaps.org':'有機結構式','gaps.tex':'專業級 TeX 斷行與字型度量','gaps.collab':'協作編輯',
+  'c1.h':'公式輸入',
+  'c1.hint':'點進去直接打字。<span class="kbd">/</span> 分數 · <span class="kbd">^</span> 上標 · <span class="kbd">_</span> 下標 · <span class="kbd">Tab</span> 跳下一格 · <span class="kbd">Ctrl/⌘ Z</span> 復原 · <span class="kbd">←→</span> 在樹裡移動 · <span class="kbd">↑↓</span> 換層 · <span class="kbd">Backspace</span> 語義刪除（刪分數線會把分子留下）<br>會 LaTeX 的話直接打指令：<span class="kbd">\\sqrt</span> <span class="kbd">\\frac</span> <span class="kbd">\\comb</span> <span class="kbd">\\pi</span> <span class="kbd">\\geqslant</span>，空白鍵提交。',
+  'c1.note':'切換制式，第 2 屏的 LaTeX 會跟著變。組合數在大陸教材寫作 <i>C</i><sub>n</sub><sup>m</sup>，香港 DSE 寫作 <i><sub>n</sub>C<sub>r</sub></i>，國際寫作 <code>\\binom{n}{m}</code>。三種寫法是同一個語義節點的三種呈現。存進資料庫的是「組合數」這個語義，匯出時才決定寫成哪種記號。【待補：臺灣教材的上下標順序尚未查證，暫未單列】',
+  'nota.label':'記號制式','nota.cn':'大陸教材','nota.hk':'香港 DSE','nota.intl':'國際通用',
+  'btn.undo':'復原','btn.clear':'清除','btn.demo':'載入範例',
+  'c2.h':'同一棵樹，四種輸出',
+  'c2.hint':'LaTeX 給排版與試卷，MathML 給螢幕閱讀器與無障礙，UnicodeMath 給 Word/OMML 互通，語義樹給評分與學習分析。字串在這裡都是匯出物，儲存格式是語義樹。',
+  'why.tex':'排版 / 試卷 / 題庫','why.mml':'螢幕閱讀器 / 無障礙','why.uni':'Word 線性輸入','why.ast':'評分 / 學習分析','out.ast':'語義樹',
+  'c2.speech':'螢幕閱讀器朗讀（由 MathML 語義推導，非字串猜測）：',
+  'c3.h':'確定性評分',
+  'c3.hint':'等價判定走引擎，不走模型。數值抽樣加有理數精確比較判「對不對」，結構檢查判「形式合不合要求」。錯因由同一台引擎依錯誤規則跑一遍導出，不交給模型編。',
+  'lbl.std':'標準答案（教師端）','lbl.stu':'學生作答（可直接改，即時評分）',
+  'form.label':'形式要求','form.none':'不限','form.simplest':'最簡分數','form.rational':'分母有理化',
+  'c3.note':'編輯器在這條鏈路上只負責把語義收乾淨。拿不到語義就評不了分，只能拿字串比對，那等於沒評。',
+  'c4.h':'嵌進你自己的系統',
+  'c4.hint':'兩種接法。同頁嵌入拿到實例直接調用方法；跨域或需要沙箱時用 iframe 加 postMessage。右邊那個編輯器就是用左邊的代碼掛上去的，改一下公式，宿主收到的回調會即時印出來。',
+  'c4.host':'宿主頁面',
+  'c4.note':'不掛介面也能用，宿主批量遷移題庫時直接調用：<code>CocoMath.parseLaTeX(s)</code> 取語義樹、<code>CocoMath.latexToMathML(s)</code> 產生無障礙標記、<code>CocoMath.areEquivalent(a, b)</code> 判兩個式子等不等價。iframe 接法把本頁用 <code>?embed=1</code> 開啟，宿主發 <code>{type:\'cocomath:set\', latex}</code>，收 <code>{type:\'cocomath:change\', …}</code>。',
+    'r0.a':'所見即所得輸入 · 游標在語義樹裡移動', 'r0.c':'分數 / 根號 / 上下標 / 矩陣 / 括號自動縮放',
+  'r1.a':'三套記號（大陸 <i>C</i><sub>n</sub><sup>m</sup>、香港 <i><sub>n</sub>C<sub>r</sub></i>、國際 binom）', 'r1.c':'一鍵切換，底層語義不變',
+  'r2.a':'化學反應式（條件寫在箭頭上下、⇌、↑↓）', 'r2.c':'初中化學最高頻的輸入',
+  'r3.a':'四格匯出 + 螢幕閱讀器朗讀', 'r3.c':'MathML 由語義生成，不是用正則表達式改寫 LaTeX',
+  'r4.a':'確定性評分 + 錯因引擎導出', 'r4.c':'數值抽樣 + 有理數精確 + 形式檢查',
+  'r5.a':'編輯手感：復原重做 · <code>\\指令</code>輸入 · 貼上 LaTeX', 'r5.c':'實測常用公式 8–33 鍵，全部鍵盤可達',
+  'r6.a':'選取範圍：拖曳選取、Shift+方向鍵選一段', 'r6.c':'剩餘最大缺口。改長公式只能逐字退格',
+  'r7.a':'手寫與拍照識別', 'r7.c':'iPad 上老師和學生都不用鍵盤',
+  'r8.a':'小學直式、直式計算', 'r8.c':'國際上的程式庫全都沒有，需自建節點',
+  'r9.a':'專業級 TeX 斷行與字型度量', 'r9.c':'正式版改用 MathLive（MIT）承擔排版層，核心保留',
+  'c5.h':'這一版有什麼、缺什麼','c5.cap':'能力','c5.this':'本原型','c5.note':'說明',
+  'v.pass':'判定通過','v.fail':'未通過','v.eq':'數值等價','v.eqYes':'等價','v.eqNo':'不等價',
+  'v.samples':'組抽樣全部一致','v.diverge':'抽樣即出現分歧','v.form':'形式要求','v.notmet':'不滿足',
+  'v.std':'標準答案','v.stu':'學生作答','v.hit':'命中已知誤解','v.nohit':'答案不等價，但<b>未命中</b>已登錄的誤解。',
+  'v.nohit2':'這種情況不交給模型猜，走人工歸因，確認後新增一條規則。',
+  'v.derived':'這個錯值由引擎導出：把該誤解實作成一條規則，交給同一台引擎跑一遍。所以能對學生指名道姓地說他哪一步錯了。',
+  'v.probes':'錯因探針（引擎依各條錯誤規則各跑一遍，與正確值有偏差才算「適用於本題」）',
+  'v.pmis':'誤解','v.pval':'引擎導出的錯值','v.pstu':'與學生作答','v.na':'本題不適用','v.miss':'不符','v.gothit':'✓ 命中',
+  'f.simplestBad':'還沒算完：要求最簡分數時，答案應當是一個分數，不能留著運算符',
+  'f.coprime':'分子分母互質','f.reducible':'還能約分：分子分母有公因數','f.shouldbe':'應寫成',
+  'f.notfrac':'不是分數形式，形式要求不適用','f.hasvar':'含變數，略過最簡判定',
+  'f.denomroot':'分母仍含根號，未有理化','f.denomok':'分母不含根號','f.none':'未設形式要求',
+  'm.fracadd':'分數加法：分子分母分別相加','m.fracaddH':'把 a/b + c/d 算成 (a+c)/(b+d)，沒通分。',
+  'm.powdist':'和的乘方 = 乘方的和','m.powdistH':'把 (a+b)ⁿ 算成 aⁿ+bⁿ，漏掉交叉項。',
+  'm.rootdist':'根號可分配','m.rootdistH':'把 √(a+b) 算成 √a+√b。',
+  'p.common':'常用','p.cn':'教材記號','p.chem':'化學','p.big':'運算符 · 矩陣',
+  'p.frac':'分數','p.sup':'上標','p.sub':'下標','p.sqrt':'根號','p.root':'n 次根',
+  'p.paren':'括號','p.brack':'方括號','p.abs':'絕對值','p.comb':'組合數','p.perm':'排列數',
+  'p.ge':'大於等於','p.le':'小於等於','p.sim':'相似','p.cong':'全等','p.vec':'向量','p.mean':'平均數',
+  'p.cond':'反應條件','p.rev':'可逆','p.gas':'氣體','p.pcp':'沉澱','p.heat':'加熱','p.sub2':'下標','p.ion':'離子','p.cat':'催化劑',
+  'p.sum':'求和','p.int':'積分','p.lim':'極限','p.mat':'2×2 矩陣','p.cases':'聯立方程','p.piece':'分段函數',
+  's.over':'分之','s.plus':'加','s.minus':'減','s.times':'乘','s.div':'除以','s.eq':'等於',
+  's.sqrt':'根號下','s.nroot':'次根號下','s.sq':'的平方','s.pow':'次方','s.of':'的','s.sub':'下標',
+  's.paren1':'括號','s.paren2':'括號完','s.vec':'向量','s.comb':'的組合數','s.perm':'的排列數','s.choose':'選',
+},
+'en': {
+  'ui.theme':'Toggle theme', 'ui.copy':'Copy', 'ui.copied':'Copied', 'ui.copyfail':'Select and copy', 'ui.empty':'(empty)',
+  'hero.title':'CocoMath · A formula editor for K–12 STEM',
+  'hero.sub':'WYSIWYG formula entry backed by a semantic tree, not a LaTeX string. One tree renders in mainland, Hong Kong DSE, or international notation, exports to four formats, and feeds a deterministic grader directly. Everything on this page is live.',
+  'tag.ast':'Semantic AST','tag.cn':'Three notation systems','tag.chem':'Chemical equations','tag.grade':'Deterministic grading','tag.embed':'Embeddable','tag.nodep':'No dependencies',
+  'gaps.label':'Not in this build yet:','gaps.hw':'Handwriting & photo input','gaps.vert':'Primary long-form arithmetic','gaps.org':'Organic structures','gaps.tex':'Publication-grade TeX line breaking','gaps.collab':'Collaborative editing',
+  'c1.h':'Formula entry',
+  'c1.hint':'Click in and type. <span class="kbd">/</span> fraction · <span class="kbd">^</span> superscript · <span class="kbd">_</span> subscript · <span class="kbd">Tab</span> next slot · <span class="kbd">Ctrl/⌘ Z</span> undo · <span class="kbd">←→</span> move through the tree · <span class="kbd">↑↓</span> change level · <span class="kbd">Backspace</span> semantic delete (removing a fraction bar keeps the numerator)<br>If you know LaTeX, just type the command: <span class="kbd">\\sqrt</span> <span class="kbd">\\frac</span> <span class="kbd">\\comb</span> <span class="kbd">\\pi</span> <span class="kbd">\\ge</span> — space commits.',
+  'c1.note':'Switch the notation and the LaTeX in panel 2 changes with it. Mainland textbooks write the binomial as <i>C</i><sub>n</sub><sup>m</sup>, Hong Kong DSE writes <i><sub>n</sub>C<sub>r</sub></i>, and international practice writes <code>\\binom{n}{m}</code>. All three are renderings of one semantic node. What gets stored is the concept "binomial coefficient"; the notation is chosen at export time. [To confirm: Taiwan\'s sub/superscript order is unverified and not yet offered separately.]',
+  'nota.label':'Notation','nota.cn':'Mainland','nota.hk':'HK DSE','nota.intl':'International',
+  'btn.undo':'Undo','btn.clear':'Clear','btn.demo':'Load example',
+  'c2.h':'One tree, four outputs',
+  'c2.hint':'LaTeX for typesetting and exam papers, MathML for screen readers, UnicodeMath for Word/OMML round-tripping, and the semantic tree for grading and learning analytics. Every string here is an export; the storage format is the tree.',
+  'why.tex':'Typesetting / papers','why.mml':'Screen readers / a11y','why.uni':'Word linear input','why.ast':'Grading / analytics','out.ast':'Semantic tree',
+  'c2.speech':'Screen-reader speech (derived from MathML semantics, not guessed from the string):',
+  'c3.h':'Deterministic grading',
+  'c3.hint':'Equivalence is decided by an engine, not a model. Numeric sampling plus exact rational comparison answers "is it right"; a structural check answers "is it in the required form". Wrong-answer causes are derived by running the same engine under an erroneous rule, never invented by a model.',
+  'lbl.std':'Reference answer (teacher)','lbl.stu':'Student answer (editable, graded live)',
+  'form.label':'Required form','form.none':'Any','form.simplest':'Lowest terms','form.rational':'Rationalised denominator',
+  'c3.note':'In this chain the editor is only responsible for capturing clean semantics. Without semantics there is no grading, only string comparison, which grades nothing.',
+  'c4.h':'Embed it in your own system',
+  'c4.hint':'Two ways in. Mount it in the same page and call methods on the instance, or use an iframe with postMessage when you need cross-origin or sandboxing. The editor on the right was mounted with the code on the left; edit the formula and the host callbacks print live.',
+  'c4.host':'Host page',
+  'c4.note':'It also works headless, for bulk-migrating an existing question bank: <code>CocoMath.parseLaTeX(s)</code> for the semantic tree, <code>CocoMath.latexToMathML(s)</code> for accessible markup, <code>CocoMath.areEquivalent(a, b)</code> to compare two expressions. For the iframe route, open this page with <code>?embed=1</code>, post <code>{type:\'cocomath:set\', latex}</code> and listen for <code>{type:\'cocomath:change\', …}</code>.',
+    'r0.a':'WYSIWYG entry · cursor moves through the semantic tree', 'r0.c':'Fractions, radicals, scripts, matrices, auto-scaling delimiters',
+  'r1.a':'Three notations (mainland <i>C</i><sub>n</sub><sup>m</sup>, HK <i><sub>n</sub>C<sub>r</sub></i>, international binom)', 'r1.c':'One click to switch; the underlying semantics do not change',
+  'r2.a':'Chemical equations (conditions above/below the arrow, ⇌, ↑↓)', 'r2.c':'The highest-frequency input in junior-secondary chemistry',
+  'r3.a':'Four export formats + screen-reader speech', 'r3.c':'MathML is generated from semantics, not regex-rewritten LaTeX',
+  'r4.a':'Deterministic grading + engine-derived misconceptions', 'r4.c':'Numeric sampling, exact rationals, structural form checks',
+  'r5.a':'Editing feel: undo/redo · <code>\\command</code> entry · paste LaTeX', 'r5.c':'Measured at 8–33 keystrokes for common formulas, all keyboard-reachable',
+  'r6.a':'Selection: drag-select, Shift+arrow to select a span', 'r6.c':'The largest remaining gap. Editing a long formula means backspacing character by character',
+  'r7.a':'Handwriting and photo input', 'r7.c':'Neither teachers nor students use a keyboard on an iPad',
+  'r8.a':'Primary-school long-form arithmetic layouts', 'r8.c':'No international library has these; custom nodes required',
+  'r9.a':'Publication-grade TeX line breaking and font metrics', 'r9.c':'Production build hands typesetting to MathLive (MIT); the core stays',
+  'c5.h':'What this build does and does not do','c5.cap':'Capability','c5.this':'This build','c5.note':'Notes',
+  'v.pass':'Passed','v.fail':'Not passed','v.eq':'Numeric equivalence','v.eqYes':'equivalent','v.eqNo':'not equivalent',
+  'v.samples':'sample points all agree','v.diverge':'samples diverge immediately','v.form':'Required form','v.notmet':'not met',
+  'v.std':'Reference','v.stu':'Student','v.hit':'Matched a known misconception','v.nohit':'The answer is not equivalent, but it matches <b>none</b> of the registered misconceptions.',
+  'v.nohit2':'Cases like this are not handed to a model to guess. They go to human attribution, and a new rule is added once confirmed.',
+  'v.derived':'This wrong value was derived by the engine: the misconception is implemented as a rule and run through the same engine. That is why the student can be told exactly which step went wrong.',
+  'v.probes':'Misconception probes (the engine runs each erroneous rule; a rule counts as applicable only when it actually diverges from the correct value)',
+  'v.pmis':'Misconception','v.pval':'Engine-derived wrong value','v.pstu':'vs student answer','v.na':'not applicable here','v.miss':'no match','v.gothit':'✓ matched',
+  'f.simplestBad':'Not finished: when lowest terms are required the answer must be a single fraction, with no operators left',
+  'f.coprime':'numerator and denominator are coprime','f.reducible':'Still reducible: common factor','f.shouldbe':'should be',
+  'f.notfrac':'not a fraction, form requirement does not apply','f.hasvar':'contains variables, lowest-terms check skipped',
+  'f.denomroot':'the denominator still contains a radical','f.denomok':'no radical in the denominator','f.none':'no form requirement set',
+  'm.fracadd':'Adding fractions by adding numerators and denominators','m.fracaddH':'Computing a/b + c/d as (a+c)/(b+d), without a common denominator.',
+  'm.powdist':'Power of a sum equals sum of powers','m.powdistH':'Computing (a+b)ⁿ as aⁿ+bⁿ, dropping the cross terms.',
+  'm.rootdist':'Radicals distribute over addition','m.rootdistH':'Computing √(a+b) as √a+√b.',
+  'p.common':'Common','p.cn':'Textbook notation','p.chem':'Chemistry','p.big':'Operators · Matrices',
+  'p.frac':'fraction','p.sup':'superscript','p.sub':'subscript','p.sqrt':'square root','p.root':'nth root',
+  'p.paren':'parentheses','p.brack':'brackets','p.abs':'absolute value','p.comb':'combination','p.perm':'permutation',
+  'p.ge':'≥','p.le':'≤','p.sim':'similar','p.cong':'congruent','p.vec':'vector','p.mean':'mean',
+  'p.cond':'reaction condition','p.rev':'reversible','p.gas':'gas','p.pcp':'precipitate','p.heat':'heat','p.sub2':'subscript','p.ion':'ion','p.cat':'catalyst',
+  'p.sum':'sum','p.int':'integral','p.lim':'limit','p.mat':'2×2 matrix','p.cases':'system','p.piece':'piecewise',
+  's.over':' over ','s.plus':' plus ','s.minus':' minus ','s.times':' times ','s.div':' divided by ','s.eq':' equals ',
+  's.sqrt':'square root of ','s.nroot':'th root of ','s.sq':' squared','s.pow':' to the power ','s.of':' ','s.sub':' sub ',
+  's.paren1':'open paren ','s.paren2':' close paren','s.vec':'vector ','s.comb':' choose ',' s.perm':' permute ','s.perm':' permute ','s.choose':' choose ',
+},
+};
+
+let LANG = (() => {
+  const saved = (() => { try { return localStorage.getItem('cocomath.lang'); } catch { return null; } })();
+  if (saved && I18N[saved]) return saved;
+  const nav = (navigator.languages && navigator.languages[0]) || navigator.language || 'en';
+  // 繁體只做香港一版：港澳是主战场；台湾的教材记号与用语差异没核实，不做半成品
+  if (/^zh/i.test(nav)) return /(hant|hk|mo|tw)/i.test(nav) ? 'zh-HK' : 'zh-CN';
+  return 'en';
+})();
+const t = k => (I18N[LANG] && I18N[LANG][k]) ?? I18N['zh-CN'][k] ?? k;
+
+function applyLang(){
+  const html = document.documentElement;
+  html.lang = LANG === 'en' ? 'en' : (LANG === 'zh-HK' ? 'zh-Hant-HK' : 'zh-Hans');
+  document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = t(e.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-html]').forEach(e => { e.innerHTML = t(e.dataset.i18nHtml); });
+  document.querySelectorAll('[data-i18n-title]').forEach(e => { e.title = t(e.dataset.i18nTitle); });
+  document.querySelectorAll('#langseg button').forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.lang === LANG ? 'true' : 'false'));
+  try { localStorage.setItem('cocomath.lang', LANG); } catch {}
+}
+
+const main = Editor('field','mroot','caret', ed => refreshOutputs(ed));
+
+/* --- 工具面板 --- */
+const PALETTES = {
+  'p.common': [
+    ['□/□','p.frac',()=>N.frac()], ['□²','p.sup',()=>N.script(R(),R(),null)], ['□₁','p.sub',()=>N.script(R(),null,R())],
+    ['√','p.sqrt',()=>N.sqrt()], ['ⁿ√','p.root',()=>N.sqrt(R(), R())],
+    '|',
+    ['( )','p.paren',()=>N.delim('(',')')], ['[ ]','p.brack',()=>N.delim('[',']')], ['| |','p.abs',()=>N.delim('|','|')],
+    '|',
+    ['±',null,()=>SY('±','op')], ['×',null,()=>SY('×','op')], ['÷',null,()=>SY('÷','op')],
+    ['≠',null,()=>SY('≠','rel')], ['≈',null,()=>SY('≈','rel')], ['π',null,()=>SY('π','var')],
+  ],
+  'p.cn': [
+    ['C','p.comb',()=>N.choose('C')], ['A','p.perm',()=>N.choose('A')],
+    '|',
+    ['⩾','p.ge',()=>SY('⩾','rel')], ['⩽','p.le',()=>SY('⩽','rel')],
+    ['∽','p.sim',()=>SY('∽','rel')], ['≌','p.cong',()=>SY('≌','rel')],
+    '|',
+    ['AB⃗','p.vec',()=>N.acc('vec', R(SY('A'),SY('B')))], ['x̄','p.mean',()=>N.acc('bar', R(SY('x')))],
+    '|',
+    ['∵',null,()=>SY('∵','op')], ['∴',null,()=>SY('∴','op')],
+    ['∠',null,()=>SY('∠','op')], ['△',null,()=>SY('△','op')], ['⊙',null,()=>SY('⊙','op')],
+    ['∥',null,()=>SY('∥','rel')], ['⊥',null,()=>SY('⊥','rel')], ['°',null,()=>SY('°','num')],
+  ],
+  'p.chem': [
+    ['→','p.cond',()=>N.arrow('->', R(N.txt('点'),N.txt('燃')), R())],
+    ['⇌','p.rev',()=>N.arrow('<=>', R(), R())],
+    '|',
+    ['↑','p.gas',()=>SY('↑','num')], ['↓','p.pcp',()=>SY('↓','num')],
+    ['Δ','p.heat',()=>SY('Δ','num')],
+    '|',
+    ['H₂O','p.sub2',()=>N.script(R(SY('H','up')), null, R(SY('2','num')))],
+    ['SO₄²⁻','p.ion',()=>N.script(R(SY('S','up'),SY('O','up')), R(SY('2','num'),SY('-','op')), R(SY('4','num')))],
+    '|',
+    ['Δ→','p.cat',()=>N.arrow('->', R(N.txt('催'),N.txt('化'),N.txt('剂')), R(N.txt('Δ')))],
+  ],
+  'p.big': [
+    ['∑','p.sum',()=>N.bigop('∑', R(SY('i'),SY('=','rel'),SY('1','num')), R(SY('n')))],
+    ['∫','p.int',()=>N.bigop('∫', R(SY('a')), R(SY('b')))],
+    ['lim','p.lim',()=>N.lim(R(SY('x'),SY('→','op'),SY('0','num')))],
+    '|',
+    ['[  ]','p.mat',()=>N.matrix('b',[[R(),R()],[R(),R()]])],
+    ['{','p.cases',()=>N.matrix('cases',[[R()],[R()]])],
+    ['{','p.piece',()=>N.matrix('cases',[[R(),R()],[R(),R()]])],
+    '|',
+    ['sin',null,()=>N.fn('sin')], ['cos',null,()=>N.fn('cos')], ['tan',null,()=>N.fn('tan')],
+    ['log',null,()=>N.fn('log')], ['ln',null,()=>N.fn('ln')],
+  ],
+};
+const tabsEl = document.getElementById('tabs'), palEl = document.getElementById('pal');
+let curPal = Object.keys(PALETTES)[0];
+function drawTabs(){
+  tabsEl.textContent = '';
+  Object.keys(PALETTES).forEach(key => {
+    const b = el('button','tab', t(key));
+    b.dataset.pal = key;
+    b.setAttribute('role','tab'); b.setAttribute('aria-selected', key === curPal ? 'true':'false');
+    b.onclick = () => { curPal = key; drawTabs(); drawPal(key); };
+    tabsEl.appendChild(b);
+  });
+}
+function drawPal(name){
+  palEl.textContent = '';
+  let grp = el('span','grp');
+  PALETTES[name].forEach(item => {
+    if (item === '|'){ palEl.appendChild(grp); grp = el('span','grp'); return; }
+    const [glyph, lblKey, make] = item;
+    const lbl = lblKey ? t(lblKey) : null;
+    const b = el('button');
+    b.appendChild(el('span',null,glyph));
+    if (lbl) b.appendChild(el('span','lbl',lbl));
+    if (lbl) b.classList.add('wide');
+    b.dataset.key = lblKey || '';
+    b.title = lbl || glyph;
+    b.onmousedown = e => e.preventDefault();          // 不抢焦点
+    b.onclick = () => { main.field.focus(); main.insert(make()); };
+    grp.appendChild(b);
+  });
+  palEl.appendChild(grp);
+}
+drawTabs(); drawPal(curPal);
+
+/* --- 记号制式切换 --- */
+document.getElementById('notation').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true');
+  main.notation = b.dataset.n;
+  main.draw();
+};
+
+/* --- 输出面板 --- */
+function refreshOutputs(ed){
+  const o = { notation: ed.notation };
+  document.getElementById('out-tex').textContent = toTex(ed.doc, o) || '(空)';
+  document.getElementById('out-mml').textContent = '<math xmlns="http://www.w3.org/1998/Math/MathML">\n  ' + (toMML(ed.doc)||'') + '\n</math>';
+  document.getElementById('out-uni').textContent = toUni(ed.doc) || '(空)';
+  document.getElementById('out-ast').textContent = JSON.stringify(toPlain(ed.doc), null, 1);
+  document.getElementById('out-speech').textContent = speak(ed.doc).replace(/，$/,'') || '（空）';
+}
+document.querySelectorAll('.copy').forEach(b => {
+  b.onclick = async () => {
+    try { await navigator.clipboard.writeText(document.getElementById(b.dataset.c).textContent); b.textContent = '已复制'; }
+    catch { b.textContent = '手动选中复制'; }
+    setTimeout(() => b.textContent = '复制', 1400);
+  };
+});
+
+/* --- 示例 --- */
+function demoDoc(){
+  // 求根公式：x = (-b ± √(b²-4ac)) / 2a —— 一屏内出现分数、根号、上标、缩放括号
+  return R(
+    SY('x'), SY('=','rel'),
+    N.frac(
+      R(SY('-','op'), SY('b'), SY('±','op'),
+        N.sqrt(R(N.script(R(SY('b')), R(SY('2','num')), null), SY('-','op'), SY('4','num'), SY('a'), SY('c')))),
+      R(SY('2','num'), SY('a'))
+    )
+  );
+}
+document.getElementById('btn-demo').onclick = () => { main.setDoc(demoDoc()); main.field.focus(); };
+document.getElementById('btn-clear').onclick = () => { main.setDoc(R()); main.field.focus(); };
+
+/* --- 判分区 --- */
+const std = Editor('fstd','mstd','cstd', () => grade());
+const stu = Editor('fstu','mstu','cstu', () => grade());
+let formReq = 'none', srcExprForProbe = null;
+
+const PRESETS = [
+  { name:'1/2 + 1/3', form:'simplest',
+    src : () => R(N.frac(R(SY('1','num')),R(SY('2','num'))), SY('+','op'), N.frac(R(SY('1','num')),R(SY('3','num')))),
+    std : () => R(N.frac(R(SY('5','num')),R(SY('6','num')))),
+    stu : () => R(N.frac(R(SY('2','num')),R(SY('5','num')))) },
+  { name:'展开 (x+1)²', form:'none',
+    src : () => R(N.script(R(N.delim('(',')',R(SY('x'),SY('+','op'),SY('1','num')))), R(SY('2','num')), null)),
+    std : () => R(N.script(R(SY('x')),R(SY('2','num')),null), SY('+','op'), SY('2','num'), SY('x'), SY('+','op'), SY('1','num')),
+    stu : () => R(N.script(R(SY('x')),R(SY('2','num')),null), SY('+','op'), SY('1','num')) },
+  { name:'√(9+16)', form:'none',
+    src : () => R(N.sqrt(R(SY('9','num'),SY('+','op'),SY('1','num'),SY('6','num')))),
+    std : () => R(SY('5','num')),
+    stu : () => R(SY('7','num')) },
+  { name:'约分 6/8', form:'simplest',
+    src : () => R(N.frac(R(SY('6','num')),R(SY('8','num')))),
+    std : () => R(N.frac(R(SY('3','num')),R(SY('4','num')))),
+    stu : () => R(N.frac(R(SY('6','num')),R(SY('8','num')))) },
+];
+const presetEl = document.getElementById('preset');
+PRESETS.forEach((p, i) => {
+  const b = el('button', null, p.name);
+  b.setAttribute('aria-pressed', i===0 ? 'true':'false');
+  b.onclick = () => { [...presetEl.children].forEach(x=>x.setAttribute('aria-pressed','false'));
+    b.setAttribute('aria-pressed','true'); loadPreset(p); };
+  presetEl.appendChild(b);
+});
+function loadPreset(p){
+  srcExprForProbe = toExpr(p.src());
+  formReq = p.form;
+  [...document.getElementById('formreq').children].forEach(x =>
+    x.setAttribute('aria-pressed', x.dataset.f === formReq ? 'true':'false'));
+  std.setDoc(p.std()); stu.setDoc(p.stu());
+}
+document.getElementById('formreq').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true'); formReq = b.dataset.f; grade();
+};
+
+function grade(){
+  const box = document.getElementById('verdict');
+  const eStd = toExpr(std.doc), eStu = toExpr(stu.doc);
+  const { eq, samples } = equivalent(eStd, eStu);
+  const form = checkForm(stu.doc, formReq);
+  const pass = eq && form.pass;
+
+  const probes = srcExprForProbe ? probeMisconceptions(srcExprForProbe, eStu) : [];
+  const hit = probes.find(p => p.hit);
+
+  box.className = 'verdict ' + (pass ? 'pass' : 'fail');
+  let html = `<h3>${pass ? '✓ ' + t('v.pass') : '✗ ' + t('v.fail')}</h3>`;
+  html += `<div class="vline"><span class="k">${t('v.eq')}</span><span>${
+    eq ? `<b style="color:var(--ok)">${t('v.eqYes')}</b>（${samples} ${t('v.samples')}）`
+       : `<b style="color:var(--bad)">${t('v.eqNo')}</b>（${t('v.diverge')}）`}</span></div>`;
+  html += `<div class="vline"><span class="k">${t('v.form')}</span><span>${
+    form.pass ? '' : `<b style="color:var(--bad)">${t('v.notmet')}</b> · `}${esc(form.msg)}</span></div>`;
+  html += `<div class="vline"><span class="k">${t('v.std')}</span><code>${esc(toTex(std.doc,{notation:main.notation}))}</code></div>`;
+  html += `<div class="vline"><span class="k">${t('v.stu')}</span><code>${esc(toTex(stu.doc,{notation:main.notation}))}</code></div>`;
+
+  if (hit){
+    html += `<div class="diag">${t('v.hit')}：<b>${esc(t(hit.nameKey))}</b><br>
+      <span style="color:var(--muted)">${esc(t(hit.hintKey))}</span><br>${t('v.derived')}</div>`;
+  } else if (!eq){
+    html += `<div class="diag">${t('v.nohit')}
+      <span style="color:var(--muted)">${t('v.nohit2')}</span></div>`;
+  }
+
+  if (probes.length){
+    html += `<div class="probes">${t('v.probes')}
+      <table><tr><th>${t('v.pmis')}</th><th>${t('v.pval')}</th><th>${t('v.pstu')}</th></tr>` +
+      probes.map(p => `<tr><td>${esc(t(p.nameKey))}</td>
+        <td><code>${p.applicable && p.sample ? fmt(p.sample.wrong) : t('v.na')}</code></td>
+        <td class="${p.hit?'hit':''}">${p.hit ? t('v.gothit') : (p.applicable ? t('v.miss') : '—')}</td></tr>`).join('')
+      + `</table></div>`;
+  }
+  box.innerHTML = html;
+}
+const fmt = x => Math.abs(x - Math.round(x)) < 1e-9 ? String(Math.round(x)) : x.toFixed(4);
+
+/* --- 深浅色 --- */
+const tb = document.getElementById('themebtn');
+tb.onclick = () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const sysDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const next = cur ? (cur === 'dark' ? 'light' : 'dark') : (sysDark ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-theme', next);
+  requestAnimationFrame(() => { main.draw(); std.draw(); stu.draw(); });
+};
+
+/* ==========================================================================
+   嵌入接口
+   两种接法：
+   1. 同页嵌入 —— CocoMath.mount(el) 拿到一个实例，直接调方法
+   2. iframe 嵌入 —— 页面带 ?embed=1 打开，用 postMessage 通信，跨源也能用
+   ========================================================================== */
+const MML_NS = 'http://www.w3.org/1998/Math/MathML';
+
+window.CocoMath = {
+  version: '0.1.0',
+
+  mount(target, opts = {}){
+    const host = typeof target === 'string' ? document.querySelector(target) : target;
+    if (!host) throw new Error('CocoMath.mount：找不到容器 ' + target);
+    const uid = 'cm' + Math.random().toString(36).slice(2, 9);
+    const field = el('div','field'); field.id = uid+'f'; field.tabIndex = 0;
+    const root  = el('span','mroot'); root.id = uid+'r';
+    const car   = el('span','caret'); car.id = uid+'c';
+    field.append(root, car);
+    host.textContent = ''; host.appendChild(field);
+
+    const subs = [];
+    const ed = Editor(uid+'f', uid+'r', uid+'c', () => subs.forEach(fn => fn(api)));
+    ed.notation = opts.notation === 'intl' ? 'intl' : 'cn';
+    if (opts.fontSize) root.style.fontSize = opts.fontSize;
+
+    const api = {
+      el: field,
+      getLaTeX      : () => toTex(ed.doc, { notation: ed.notation }),
+      getMathML     : () => `<math xmlns="${MML_NS}">${toMML(ed.doc)}</math>`,
+      getUnicodeMath: () => toUni(ed.doc),
+      getSemantic   : () => toPlain(ed.doc),
+      getSpeech     : () => speak(ed.doc).replace(/，$/,''),
+      isEmpty       : () => ed.doc.k.length === 0,
+      setLaTeX(s){ ed.setDoc(fromTex(s)); return api; },
+      setNotation(n){ ed.notation = n === 'intl' ? 'intl' : 'cn'; ed.draw(); return api; },
+      clear(){ ed.setDoc(R()); return api; },
+      focus(){ field.focus(); return api; },
+      on(evt, fn){ if (evt === 'change' && typeof fn === 'function') subs.push(fn); return api; },
+      // 判分也开放出去：宿主传标准答案，拿回等价判定、形式检查与误因
+      grade(referenceLatex, o = {}){
+        const ref = fromTex(referenceLatex);
+        const { eq, samples } = equivalent(toExpr(ref), toExpr(ed.doc));
+        const form = checkForm(ed.doc, o.form || 'none');
+        const probes = o.sourceLatex
+          ? probeMisconceptions(toExpr(fromTex(o.sourceLatex)), toExpr(ed.doc))
+              .filter(x => x.hit).map(x => ({ id:x.id, name:t(x.nameKey), hint:t(x.hintKey) }))
+          : [];
+        return { equivalent: eq, samples, form: { pass: form.pass, message: form.msg },
+                 pass: eq && form.pass, misconceptions: probes };
+      },
+    };
+    if (opts.value) api.setLaTeX(opts.value);
+    if (opts.autofocus) api.focus();
+    return api;
+  },
+
+  // 不挂界面也能用：宿主批量转换题库时直接调
+  parseLaTeX  : s => toPlain(fromTex(s)),
+  latexToMathML: s => `<math xmlns="${MML_NS}">${toMML(fromTex(s))}</math>`,
+  latexToSpeech: s => speak(fromTex(s)).replace(/，$/,''),
+  areEquivalent: (a, b) => equivalent(toExpr(fromTex(a)), toExpr(fromTex(b))).eq,
+
+  // 解析 → 导出的往返，给检查脚本用；parse 或 serialize 任一侧坏了都会露出来。
+  // 记号要指定：大陆 C_n^m、香港 nCr、国际 \binom 是同一语义节点的三种写法，
+  // 用别的记号导出当然不等于原串——那不是 bug，正是这个设计的目的。
+  __roundtrip: (s, notation = 'cn') => toTex(fromTex(s), { notation }),
+};
+
+/* --- iframe 模式：?embed=1 --- */
+const EMBED = /(?:\?|&)embed=1\b/.test(location.search);
+if (EMBED){
+  document.querySelector('.wrap').remove();
+  document.getElementById('themebtn').remove();
+  document.body.style.padding = '10px';
+  const host = el('div'); document.body.appendChild(host);
+  const q = new URLSearchParams(location.search);
+  const inst = window.CocoMath.mount(host, {
+    notation: q.get('notation') || 'cn',
+    value: q.get('latex') || '',
+    fontSize: q.get('size') || '',
+  });
+  const post = (msg) => parent.postMessage(Object.assign({ source:'cocomath' }, msg), '*');
+  const snapshot = () => ({ latex: inst.getLaTeX(), mathml: inst.getMathML(),
+                            semantic: inst.getSemantic(), speech: inst.getSpeech() });
+  inst.on('change', () => post({ type:'cocomath:change', ...snapshot() }));
+  addEventListener('message', e => {
+    const d = e.data;
+    if (!d || typeof d !== 'object') return;
+    // 只认自己的消息类型；宿主页面上别的库发的消息一律不碰
+    if (d.type === 'cocomath:set' && typeof d.latex === 'string') inst.setLaTeX(d.latex);
+    else if (d.type === 'cocomath:notation') inst.setNotation(d.value);
+    else if (d.type === 'cocomath:get') post({ type:'cocomath:value', ...snapshot() });
+    else if (d.type === 'cocomath:focus') inst.focus();
+  });
+  post({ type:'cocomath:ready', version: window.CocoMath.version });
+}
+
+/* --- 语言切换 --- */
+function setLang(l){
+  if (!I18N[l]) return;
+  LANG = l;
+  applyLang();
+  drawTabs(); drawPal(curPal);
+  if (!EMBED){
+    refreshOutputs(main);
+    grade();
+    if (window.__repaintEmbed) window.__repaintEmbed();
+  }
+}
+document.getElementById('langseg').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  setLang(b.dataset.lang);
+};
+
+/* --- 启动（完整页面模式） --- */
+applyLang();
+if (!EMBED){
+  document.getElementById('btn-undo').onclick = () => { main.field.focus(); main.undo(); };
+  main.setDoc(demoDoc(), false);
+  loadPreset(PRESETS[0]);
+
+  // 嵌入演示：这一段就是左边那块代码，真的跑
+  window.__repaintEmbed = null;
+  const embedded = window.CocoMath.mount('#host', {
+    notation: 'cn',
+    value: '\\frac{1}{2}+\\frac{1}{3}',
+    fontSize: '24px',
+  });
+  const hostout = document.getElementById('hostout');
+  const paint = e => {
+    const g = e.grade('\\frac{5}{6}', { form:'simplest', sourceLatex:'\\frac{1}{2}+\\frac{1}{3}' });
+    const why = g.misconceptions.length ? `误因：${g.misconceptions[0].name}`
+              : !g.form.pass ? g.form.message
+              : g.equivalent ? '' : '与标准答案不等价';
+    hostout.innerHTML =
+      `getLaTeX() → <b>${esc(e.getLaTeX()) || '(空)'}</b><br>` +
+      `getSpeech() → <b>${esc(e.getSpeech()) || '(空)'}</b><br>` +
+      `grade() → <b style="color:var(--${g.pass?'ok':'bad'})">${g.pass ? 'pass' : 'fail'}</b>` +
+      `${why ? ` · ${esc(why)}` : ''}`;
+  };
+  embedded.on('change', paint); paint(embedded);
+  window.__repaintEmbed = () => paint(embedded);
+
+  addEventListener('resize', () => { main.placeCaret(); std.placeCaret(); stu.placeCaret(); });
+}
+</script>
+
+</body>
+</html>
